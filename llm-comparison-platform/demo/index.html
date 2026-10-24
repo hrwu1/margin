@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#edf1f3">
+    <meta name="description" content="Margin — a small notebook for comparing AI answers and remembering why one worked better. Interactive sample demo.">
+    <title>Margin — a little context for every choice</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;450;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./demo.css">
+    <script type="module" src="./demo.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <div id="app"></div>
+    <div id="announcement" class="sr-only" role="status" aria-atomic="true"></div>
+    <dialog id="about-dialog" aria-labelledby="about-title">
+      <form method="dialog"><button class="icon-button close-dialog" aria-label="Close explanation">×</button></form>
+      <span class="eyebrow">A little context for every choice</span>
+      <h2 id="about-title">Leave a mark.<br>Remember your thinking.</h2>
+      <p>Read two answers without seeing the model names. Mark a passage that matters to you, choose a reason if you like, and cast your vote.</p>
+      <ol class="how-steps">
+        <li><span>01</span><div><strong>Read without the reputation</strong><p>Both answers get the same space and typography.</p></div></li>
+        <li><span>02</span><div><strong>Keep the useful part</strong><p>Click a paragraph to keep it with your decision. You can also vote without marking one.</p></div></li>
+        <li><span>03</span><div><strong>Come back to the why</strong><p>Your notebook brings back the answer, the vote, and the exact passage you marked.</p></div></li>
+      </ol>
+      <p class="demo-disclosure">This is a static prototype with three prewritten examples and fictional models. No prompts are sent to an AI service. Decisions stay in this browser, on this device.</p>
+      <form method="dialog"><button class="button primary">Got it, let’s compare <span aria-hidden="true">→</span></button></form>
+    </dialog>
+    <dialog id="reset-dialog" aria-labelledby="reset-title">
+      <h2 id="reset-title">Start a fresh notebook?</h2>
+      <p>This removes only the sample decisions in this demo, so you can try the blind comparison again.</p>
+      <form method="dialog" class="reset-actions"><button class="button" value="cancel">Keep my decisions</button><button class="button primary" value="reset">Reset demo</button></form>
+    </dialog>
+    <noscript><p class="noscript">Enable JavaScript to explore this interactive static demo.</p></noscript>
+  </body>
+</html>
