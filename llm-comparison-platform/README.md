@@ -23,10 +23,11 @@ For frontend development, keep the API running and run `npm run dev` from `front
 
 For the static design demos: `python3 -m http.server 8766 --bind 127.0.0.1 --directory demo` from the project root.
 
-- Three-direction design review: **http://127.0.0.1:8766/directions/**. Compare Fieldnotes (editorial notebook), Lens (dark close reading), and Workbench (evidence tray). Try the same examples, mark passages, vote, revisit the notebook, and choose a direction. Preferences and sample votes persist separately from the real app in a versioned browser-storage key.
+- Cinematic design review: **http://127.0.0.1:8766/bold/**. Aperture (dark screening room), Frequency (cobalt studio), and Folio (editorial spread). Full and focused reading, evidence, voting, notebook, scores, and a saved design choice. This bolder round uses a separate browser-storage key.
+- Earlier three-direction design review: **http://127.0.0.1:8766/directions/**. Compare Fieldnotes (editorial notebook), Lens (dark close reading), and Workbench (evidence tray). Try the same examples, mark passages, vote, revisit the notebook, and choose a direction. Preferences and sample votes persist separately from the real app in a versioned browser-storage key.
 - Earlier static design: http://127.0.0.1:8766/.
 - These are standalone HTML/CSS/JS prototypes with prewritten answers and fictional models. They do not call the API or modify SQLite. The selected frontend direction has not been integrated into React.
-- Prototype checks: `node --test demo/demo.test.mjs demo/directions/app.test.mjs`.
+- Prototype checks: `node --test demo/demo.test.mjs demo/directions/app.test.mjs demo/bold/app.test.mjs`.
 
 ## Configuration and data
 

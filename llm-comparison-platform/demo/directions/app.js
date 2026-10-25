@@ -110,7 +110,7 @@ const paths = {
 const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name]}</svg>`;
 const brand = () => `<span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>margin<span class="brand-period">.</span></span>`;
 
-if (typeof document !== 'undefined') initialize();
+if (typeof document !== 'undefined' && document.querySelector('#app')) initialize();
 
 function initialize() {
   const app = document.querySelector('#app');
