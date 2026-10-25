@@ -21,7 +21,12 @@ Open **http://127.0.0.1:8767/**. The API serves the built frontend on the same o
 
 For frontend development, keep the API running and run `npm run dev` from `frontend/`. Open http://127.0.0.1:5174/; Vite proxies `/api` to port 8767. Use the same hostname consistently because browser cookies are hostname-scoped.
 
-For the separate static design demo: `python3 -m http.server 8766 --bind 127.0.0.1 --directory demo` from the project root.
+For the static design demos: `python3 -m http.server 8766 --bind 127.0.0.1 --directory demo` from the project root.
+
+- Three-direction design review: **http://127.0.0.1:8766/directions/**. Compare Fieldnotes (editorial notebook), Lens (dark close reading), and Workbench (evidence tray). Try the same examples, mark passages, vote, revisit the notebook, and choose a direction. Preferences and sample votes persist separately from the real app in a versioned browser-storage key.
+- Earlier static design: http://127.0.0.1:8766/.
+- These are standalone HTML/CSS/JS prototypes with prewritten answers and fictional models. They do not call the API or modify SQLite. The selected frontend direction has not been integrated into React.
+- Prototype checks: `node --test demo/demo.test.mjs demo/directions/app.test.mjs`.
 
 ## Configuration and data
 
