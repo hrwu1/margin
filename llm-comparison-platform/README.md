@@ -2,7 +2,7 @@
 
 A small comparison app: enter a prompt, read two anonymous responses, vote, and revisit the decision with optional paragraph evidence. The Python API stores the entire workflow in SQLite; the React/TypeScript client is deliberately minimal while the final design remains open.
 
-**Current provider: local test fixtures.** The app accepts arbitrary prompts, but its two responses are deterministic fixtures, not language-model output. No API credentials are configured and no external model calls are made. Connecting two real models remains pending the provider/credential choice. The separate `demo/` directory is the earlier static design exploration.
+**Current provider: local test fixtures.** The app accepts arbitrary prompts, but its two responses are deterministic fixtures, not language-model output. No API credentials are configured and no external model calls are made. Connecting two real models remains pending the provider/credential choice. The separate `demo/` directory contains interactive design prototypes; the current Refero-based workspace is at `/workspace/`.
 
 ## Run locally
 
@@ -23,11 +23,11 @@ For frontend development, keep the API running and run `npm run dev` from `front
 
 For the static design demos: `python3 -m http.server 8766 --bind 127.0.0.1 --directory demo` from the project root.
 
-- Cinematic design review: **http://127.0.0.1:8766/bold/**. Aperture (dark screening room), Frequency (cobalt studio), and Folio (editorial spread). Full and focused reading, evidence, voting, notebook, scores, and a saved design choice. This bolder round uses a separate browser-storage key. Interaction feedback includes passage-to-evidence transfers, sliding reading controls, model reveal, and a spatial handoff into the notebook. Motion can be turned off; OS reduced-motion is respected. Optional vibration requires a supported touch device/browser and has not been physically tested.
-- Earlier three-direction design review: **http://127.0.0.1:8766/directions/**. Compare Fieldnotes (editorial notebook), Lens (dark close reading), and Workbench (evidence tray). Try the same examples, mark passages, vote, revisit the notebook, and choose a direction. Preferences and sample votes persist separately from the real app in a versioned browser-storage key.
-- Earlier static design: http://127.0.0.1:8766/.
-- These are standalone HTML/CSS/JS prototypes with prewritten answers and fictional models. They do not call the API or modify SQLite. The selected frontend direction has not been integrated into React.
-- Prototype checks: `node --test demo/demo.test.mjs demo/directions/app.test.mjs demo/bold/*.test.mjs`.
+- **Current interactive workspace: http://127.0.0.1:8766/workspace/**. Compact paired answers, a shared prompt, and an optional evidence drawer. Select an exact excerpt or use a passage’s + control, add a reason/note, then vote to reveal the fictional model names. Drafts and immutable votes persist on this device; the notebook reopens saved evidence and the scorecard follows model identities when sides swap.
+- The workspace uses fluid panel resizing, local state transitions, and in-place identity reveal. Settings can disable motion; system reduced-motion takes precedence. Optional vibration requires a supported touch device/browser and has not been physically tested. Phone layouts use answer tabs and an evidence sheet.
+- Retired design explorations remain available for history at `/bold/`, `/directions/`, and `/`. They are not approved design targets.
+- All demos are standalone HTML/CSS/JS with prewritten answers and fictional models. They do not call the API or modify SQLite. The new design has not been integrated into React. Its exact excerpts, two-sided evidence, and freeform notes are prototype features and will need API/schema work if adopted.
+- Prototype checks: `node --test demo/demo.test.mjs demo/directions/app.test.mjs demo/bold/*.test.mjs demo/workspace/*.test.mjs`.
 
 ## Configuration and data
 
