@@ -1,14 +1,14 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark light">
-  <meta name="theme-color" content="#08090a">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#ffffff">
   <script>
     // Restore before styles paint, including when browser storage is blocked.
-    try { document.documentElement.dataset.theme = localStorage.getItem('margin-workspace-theme-v1') === 'light' ? 'light' : 'dark'; }
-    catch { document.documentElement.dataset.theme = 'dark'; }
+    try { document.documentElement.dataset.theme = localStorage.getItem('margin-workspace-theme-v1') === 'dark' ? 'dark' : 'light'; }
+    catch { document.documentElement.dataset.theme = 'light'; }
     document.querySelector('meta[name="theme-color"]').content = document.documentElement.dataset.theme === 'light' ? '#ffffff' : '#08090a';
   </script>
   <title>Margin · Compare with a point of view</title>

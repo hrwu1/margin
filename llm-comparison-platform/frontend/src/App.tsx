@@ -27,7 +27,7 @@ export function App() {
   const [scores, setScores] = useState<Score[]>([]);
   const [dialog, setDialog] = useState<'Notebook' | 'Scorecard' | 'Interaction settings' | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [theme, setTheme] = useState(document.documentElement.dataset.theme || 'dark');
+  const [theme, setTheme] = useState(document.documentElement.dataset.theme || 'light');
   const [toast, setToast] = useState('');
   const [reload, setReload] = useState(0);
   const panel = useRef<ComparisonHandle>(null);
