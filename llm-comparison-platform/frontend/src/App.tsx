@@ -1,140 +1,158 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
 import { api, errorMessage } from './api';
-import type { Comparison, HistoryPage, Score, Session, VoteInput } from './api';
+import type { Comparison, HistoryPage, Score, Session } from './api';
 import { ComparisonPanel } from './ComparisonPanel';
+import type { ComparisonHandle } from './ComparisonPanel';
+import { dateLabel } from './format';
+import { Dialog, Icon, useFeedback } from './ui';
 
-function routeFromHash() {
-  const [view, id] = location.hash.slice(1).split('/');
-  return { view: view === 'history' || view === 'scores' ? view : 'compare', id: view === 'compare' ? id : undefined };
-}
-
+const currentId = () => location.hash.match(/^#compare\/([a-f\d-]{36})$/i)?.[1] || null;
+const starters = [
+  { title: 'Explain a tradeoff', prompt: 'When should a small application use SQLite instead of PostgreSQL? Explain the tradeoffs and give a concrete example. Keep the answer under 250 words.' },
+  { title: 'Review a function', prompt: 'Review this Python function. Identify its bug, explain a minimal fix, and show the corrected code:\n\ndef average(values):\n    return sum(values) / len(values)' },
+  { title: 'Make a message clearer', prompt: 'Rewrite this message to be clear, warm, and concise without changing its meaning: “We have reviewed the implementation and there are a number of things that still need to be addressed before we can consider this to be ready to ship.” Explain your main edit in one sentence.' },
+];
 export function App() {
-  const [route, setRoute] = useState(routeFromHash);
   const [session, setSession] = useState<Session | null>(null);
-  const [error, setError] = useState('');
-  const [pollError, setPollError] = useState('');
+  const [id, setId] = useState(currentId);
+  const [comparison, setComparison] = useState<Comparison | null>(null);
   const [prompt, setPrompt] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [comparison, setComparison] = useState<Comparison | null>(null);
+  const [error, setError] = useState('');
+  const [pollError, setPollError] = useState('');
+  const [overviewError, setOverviewError] = useState('');
   const [history, setHistory] = useState<HistoryPage>({ items: [], has_more: false });
-  const [scores, setScores] = useState<Score[]>([]);
+  const [recent, setRecent] = useState<HistoryPage['items']>([]);
   const [offset, setOffset] = useState(0);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const request = useRef<{ prompt: string; id: string } | null>(null);
+  const [scores, setScores] = useState<Score[]>([]);
+  const [dialog, setDialog] = useState<'Notebook' | 'Scorecard' | 'Interaction settings' | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [theme, setTheme] = useState(document.documentElement.dataset.theme || 'dark');
+  const [toast, setToast] = useState('');
+  const [reload, setReload] = useState(0);
+  const panel = useRef<ComparisonHandle>(null);
+  const creation = useRef<{ prompt: string; id: string } | null>(null);
   const overviewVersion = useRef(0);
-
-  useEffect(() => {
-    const changed = () => { setRoute(routeFromHash()); setError(''); setPollError(''); };
-    window.addEventListener('hashchange', changed);
-    api<Session>('/session', { method: 'POST' }).then(setSession).catch(error => setError(errorMessage(error)));
-    return () => window.removeEventListener('hashchange', changed);
-  }, []);
-
-  const refreshOverview = useCallback(async () => {
+  const navigationVersion = useRef(0);
+  const feedback = useFeedback();
+  const visible = comparison?.id === id ? comparison : null;
+  const notify = useCallback((message: string) => setToast(message), []);
+  useEffect(() => { if (toast) { const timer = setTimeout(() => setToast(''), 3200); return () => clearTimeout(timer); } }, [toast]);
+  const refreshOverview = useCallback(async (page = 0) => {
     const version = ++overviewVersion.current;
-    const [nextHistory, nextScores] = await Promise.all([
-      api<HistoryPage>(`/comparisons?limit=20&offset=${offset}`), api<{ items: Score[] }>('/scores'),
-    ]);
-    if (version !== overviewVersion.current) return;
-    setHistory(nextHistory);
-    setScores(nextScores.items);
-  }, [offset]);
-
-  useEffect(() => {
-    if (session) void refreshOverview().catch(error => setError(errorMessage(error)));
-  }, [session, refreshOverview, route.view]);
-
-  useEffect(() => {
-    setComparison(null);
-    setPollError('');
-    if (!session || !route.id) return;
-    const controller = new AbortController();
-    api<Comparison>(`/comparisons/${encodeURIComponent(route.id)}`, { signal: controller.signal })
-      .then(setComparison).catch(error => { if (!controller.signal.aborted) setError(errorMessage(error)); });
-    return () => controller.abort();
-  }, [session, route.id, refreshKey]);
-
-  useEffect(() => {
-    if (!comparison || comparison.status !== 'pending') return;
-    const controller = new AbortController();
-    const identifier = comparison.id;
-    const deadline = Date.now() + 130000;
-    let timer: ReturnType<typeof setTimeout>;
-    async function poll() {
-      try {
-        const next = await api<Comparison>(`/comparisons/${identifier}`, { signal: controller.signal });
-        if (controller.signal.aborted) return;
-        setComparison(next);
-        if (next.status !== 'pending') { await refreshOverview(); return; }
-        if (Date.now() >= deadline) { setPollError('This comparison is still pending. Refresh to check its latest saved state.'); return; }
-        timer = setTimeout(poll, 750);
-      } catch (error) { if (!controller.signal.aborted) setPollError(errorMessage(error)); }
-    }
-    timer = setTimeout(poll, 750);
-    return () => { controller.abort(); clearTimeout(timer); };
-  }, [comparison?.id, comparison?.status, refreshOverview]);
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    if (submitting || !prompt.trim()) return;
-    const clean = prompt.trim();
-    if (request.current?.prompt !== clean) request.current = { prompt: clean, id: crypto.randomUUID() };
-    setSubmitting(true);
-    setError('');
     try {
-      const created = await api<Comparison>('/comparisons', { method: 'POST', body: JSON.stringify({ prompt: clean, request_id: request.current.id }) });
-      request.current = null;
-      location.hash = `compare/${created.id}`;
-      await refreshOverview();
-    } catch (error) { setError(errorMessage(error)); }
+      const [nextHistory, nextScores] = await Promise.all([api<HistoryPage>(`/comparisons?limit=20&offset=${page}`), api<{ items: Score[] }>('/scores')]);
+      if (version !== overviewVersion.current) return;
+      setHistory(nextHistory); setScores(nextScores.items); setOffset(page); setOverviewError('');
+      if (page === 0) setRecent(nextHistory.items);
+    } catch (failure) { if (version === overviewVersion.current) setOverviewError(errorMessage(failure)); }
+  }, []);
+  useEffect(() => {
+    let active = true;
+    api<Session>('/session', { method: 'POST' }).then(value => { if (active) { setSession(value); void refreshOverview(); } }).catch(failure => { if (active) setError(errorMessage(failure)); });
+    return () => { active = false; };
+  }, [refreshOverview]);
+  useEffect(() => {
+    const change = async () => {
+      const next = currentId();
+      const version = ++navigationVersion.current;
+      if (next === id) return;
+      if (panel.current && !await panel.current.flush()) { location.replace(id ? `#compare/${id}` : '#'); notify('Save your changes before leaving this comparison.'); return; }
+      if (version !== navigationVersion.current) return;
+      setId(next); setDrawerOpen(false); setError(''); setPollError('');
+    };
+    window.addEventListener('hashchange', change);
+    return () => window.removeEventListener('hashchange', change);
+  }, [id, notify]);
+  useEffect(() => {
+    if (!session || !id) return;
+    const controller = new AbortController();
+    setError('');
+    api<Comparison>(`/comparisons/${id}`, { signal: controller.signal }).then(setComparison).catch(failure => { if (!controller.signal.aborted) setError(errorMessage(failure)); });
+    return () => controller.abort();
+  }, [id, session, reload]);
+  useEffect(() => {
+    if (!visible || visible.status !== 'pending') return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    const poll = async () => {
+      try {
+        const next = await api<Comparison>(`/comparisons/${visible.id}`, { signal: controller.signal });
+        if (controller.signal.aborted) return;
+        setComparison(next); setPollError('');
+        if (next.status !== 'pending') { void refreshOverview(); return; }
+      } catch (failure) { if (controller.signal.aborted) return; setPollError(errorMessage(failure)); }
+      timer = setTimeout(poll, 1000);
+    };
+    timer = setTimeout(poll, 650);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [visible?.id, visible?.status, refreshOverview]);
+
+  async function navigate(next: string | null, text = '') {
+    if (panel.current && !await panel.current.flush()) { notify('Your changes could not be saved. Retry from Highlights.'); setDrawerOpen(true); return; }
+    setDialog(null); setDrawerOpen(false); setError(''); setPollError('');
+    if (!next) { setPrompt(text); setComparison(null); creation.current = null; }
+    location.hash = next ? `compare/${next}` : '';
+    setId(next);
+    if (!next) requestAnimationFrame(() => document.getElementById('prompt')?.focus());
+  }
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    const text = prompt.trim();
+    if (!text || submitting || !session) return;
+    if (creation.current?.prompt !== text) creation.current = { prompt: text, id: crypto.randomUUID() };
+    setSubmitting(true); setError('');
+    try {
+      const created = await api<Comparison>('/comparisons', { method: 'POST', body: JSON.stringify({ prompt: text, request_id: creation.current.id }) });
+      setComparison(created); location.hash = `compare/${created.id}`; setId(created.id);
+      creation.current = null; feedback.pulse(); void refreshOverview();
+    } catch (failure) { setError(errorMessage(failure)); }
     finally { setSubmitting(false); }
   }
-
-  async function vote(input: VoteInput) {
-    if (!comparison) return;
-    setError('');
-    try {
-      const saved = await api<Comparison>(`/comparisons/${comparison.id}/vote`, { method: 'POST', body: JSON.stringify(input) });
-      if (routeFromHash().id === saved.id) setComparison(saved);
-      await refreshOverview();
-    } catch (error) { setError(errorMessage(error)); }
+  function saved(value: Comparison) {
+    setComparison(previous => previous?.id === value.id ? value : previous);
+    if (value.vote) void refreshOverview();
   }
-
-  return <div className="app">
-    <header><a className="brand" href="#compare">Margin <span>backend preview</span></a>
-      <nav aria-label="Main"><a href="#compare" aria-current={route.view === 'compare' ? 'page' : undefined}>Compare</a><a href="#history" aria-current={route.view === 'history' ? 'page' : undefined}>History</a><a href="#scores" aria-current={route.view === 'scores' ? 'page' : undefined}>Scorecard</a></nav>
-    </header>
-    <main>
-      <h1>{route.view === 'history' ? 'Your comparison history' : route.view === 'scores' ? 'Your model scorecard' : 'Compare two responses'}</h1>
-      <p className="intro">Anonymous browser session · Python API · SQLite storage</p>
-      {session?.provider_mode === 'mock' && <p className="notice"><strong>Local test provider.</strong> No AI models are connected yet. These deterministic responses test the backend; votes and history are saved in SQLite.</p>}
-      {error && <p className="error" role="alert">{error}</p>}
-      {!session && !error && <p role="status">Opening your anonymous session…</p>}
-      {session && route.view === 'compare' && <>
-        {!route.id ? <form className="prompt-form" onSubmit={event => void submit(event)}>
-          <label htmlFor="prompt">Your prompt</label><textarea id="prompt" value={prompt} onChange={event => setPrompt(event.target.value)} maxLength={session.max_prompt_length} rows={5} placeholder="Ask a question, rewrite a message, or explain a piece of code." required />
-          <div className="form-footer"><span className="hint">{prompt.length.toLocaleString()} / {session.max_prompt_length.toLocaleString()} characters</span><button className="primary" type="submit" disabled={submitting || !prompt.trim()}>{submitting ? 'Creating comparison…' : 'Compare responses'}</button></div>
-        </form> : <>
-          <div className="toolbar"><a href="#compare">← New comparison</a><button onClick={() => { setError(''); setRefreshKey(value => value + 1); }}>Refresh comparison</button></div>
-          {pollError && <p className="error" role="alert">{pollError}</p>}
-          {!comparison && !error && <p role="status">Loading the saved comparison…</p>}
-          {comparison && <ComparisonPanel key={comparison.id} comparison={comparison} onVote={vote} onRetry={() => { setPrompt(comparison.prompt); location.hash = 'compare'; }} />}
-        </>}
-      </>}
-      {session && route.view === 'history' && <section aria-label="Saved comparisons">
-        <p className="hint">Only comparisons from this browser session appear here. Opening one restores its responses, vote, reason, and evidence.</p>
-        {!history.items.length ? <p className="empty">No comparisons yet. <a href="#compare">Start your first comparison.</a></p> : <ul className="history">{history.items.map(item => <li key={item.id}>
-          <a href={`#compare/${item.id}`}>{item.prompt.length > 180 ? `${item.prompt.slice(0, 180)}…` : item.prompt}</a>
-          <span>{new Date(item.created_at).toLocaleString()} · {item.vote ? item.vote === 'tie' ? 'Voted: tie' : `Voted: ${item.vote}` : item.status === 'ready' ? 'Ready to vote' : item.status === 'pending' ? 'Generating' : 'Failed — view details'}</span>
-        </li>)}</ul>}
-        <div className="pagination"><button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 20))}>Previous</button><span>Page {Math.floor(offset / 20) + 1}</span><button disabled={!history.has_more} onClick={() => setOffset(offset + 20)}>Next</button></div>
-      </section>}
-      {session && route.view === 'scores' && <section aria-label="Model scores"><p className="hint">Counts come from your saved votes. A tie adds one tie to both models; failed or unvoted comparisons do not count.</p>
-        <div className="table-scroll"><table><caption className="sr-only">Your model wins, ties, losses, and completed comparisons</caption><thead><tr><th>Model</th><th>Wins</th><th>Ties</th><th>Losses</th><th>Compared</th></tr></thead><tbody>{scores.map(score => <tr key={score.model}><th scope="row">{score.model}</th><td>{score.wins}</td><td>{score.ties}</td><td>{score.losses}</td><td>{score.compared}</td></tr>)}</tbody></table></div>
-        {!scores.some(score => score.compared) && <p className="empty">Your first vote will update these scores.</p>}
-      </section>}
-    </main>
-    <footer>Saved on this server, scoped to this browser. Clearing your session cookie starts a new history.</footer>
-  </div>;
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    setTheme(next); document.documentElement.dataset.theme = next;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', next === 'light' ? '#ffffff' : '#08090a');
+    try { localStorage.setItem('margin-workspace-theme-v1', next); } catch { notify('Theme changed for this visit. Browser storage is unavailable.'); }
+  }
+  return <>
+    <button className="skip-link" onClick={() => document.getElementById(visible ? 'answers' : 'prompt')?.focus()}>Skip to workspace</button>
+    <div className="app-shell">
+      <aside className="sidebar" aria-label="Workspace navigation">
+        <div className="wordmark"><span className="brand-symbol" aria-hidden="true"><i/><i/><i/></span><span className="brand-name">margin</span></div>
+        <nav className="sidebar-section" aria-label="Workspace">
+          <button className="nav-button active" title="New comparison" onClick={() => void navigate(null)}><Icon name="compare"/><span>New comparison</span></button>
+          <button className="nav-button" title="Notebook" onClick={() => { setDialog('Notebook'); void refreshOverview(); }}><Icon name="book"/><span>Notebook</span></button>
+          <button className="nav-button" title="Scorecard" onClick={() => { setDialog('Scorecard'); void refreshOverview(); }}><Icon name="scores"/><span>Scorecard</span></button>
+        </nav>
+        <nav className="sidebar-section recent-list" aria-label="Recent comparisons"><p className="section-label">Recent comparisons</p>{recent.slice(0, 8).map(item => <button key={item.id} className="sample-button" title={item.prompt} aria-current={item.id === id} onClick={() => void navigate(item.id)}><Icon name={item.vote ? 'check' : 'compare'}/><span className="recent-copy">{item.prompt.slice(0, 70)}{item.prompt.length > 70 ? '…' : ''}<small>{dateLabel(item.created_at)} · {item.vote ? item.vote === 'tie' ? 'Tie' : `Preferred ${item.vote}` : item.status === 'ready' ? 'Ready to compare' : item.status === 'failed' ? 'Incomplete' : 'Generating'}</small></span></button>)}</nav>
+        <div className="sidebar-bottom"><div className="session-label"><Icon name="lock"/><span>Anonymous session</span></div><button className="nav-button" title="Interaction settings" onClick={() => setDialog('Interaction settings')}><Icon name="settings"/><span>Interaction settings</span></button></div>
+      </aside>
+      <main className="workspace" id="main">
+        <header className="topbar"><div className="breadcrumb"><span>Comparisons</span><span className="slash">/</span><strong>{visible ? visible.vote ? 'Saved decision' : 'Workspace' : 'New comparison'}</strong></div><button className="mobile-brand" aria-label="New comparison" onClick={() => void navigate(null)}>margin</button>
+          <div className="header-tools"><span className="demo-label">{session?.provider_mode === 'openai' ? 'Live models' : session ? 'Offline fixtures' : 'Connecting…'}</span><button className="icon-button theme-toggle" aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} onClick={toggleTheme}><Icon name={theme === 'dark' ? 'sun' : 'moon'}/></button>
+          {visible && <button className="evidence-toggle" id="evidence-toggle" aria-controls="evidence-drawer" aria-expanded={drawerOpen} onClick={() => setDrawerOpen(!drawerOpen)}><Icon name="panel"/>Highlights <span className="evidence-count">{visible.annotations.highlights.length}</span></button>}</div>
+        </header>
+        {(error || pollError || overviewError) && <div className="storage-warning" role="alert">{error || pollError || overviewError} <button className="quiet-button" onClick={() => { if (!session) location.reload(); else { setReload(value => value + 1); void refreshOverview(); } }}>Reconnect</button></div>}
+        {id ? visible ? <ComparisonPanel key={visible.id} ref={panel} comparison={visible} onSaved={saved} drawerOpen={drawerOpen} setDrawerOpen={setDrawerOpen} onNew={text => void navigate(null, text)} feedback={feedback} notify={notify}/> : <div className="loading-workspace" role="status">{error ? 'This comparison could not be opened.' : 'Opening comparison…'}<button className="quiet-button" onClick={() => void navigate(null)}>New comparison</button></div> : <section className="composer-region">
+          <div className="composer-intro"><span className="eyebrow">A comparison worth keeping</span><h1>One prompt.<br/>Two perspectives.</h1><p>Read without a label. Highlight what matters.<br/>Decide which answer works better for you.</p></div>
+          <form className="prompt-composer" onSubmit={submit}><label htmlFor="prompt">What would you like to compare?</label><textarea id="prompt" value={prompt} maxLength={session?.max_prompt_length || 12000} onChange={event => setPrompt(event.target.value)} placeholder="Ask a question, paste some code, or give the models a task…" required disabled={submitting} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }}/><div className="composer-actions"><span>{prompt.length.toLocaleString()} / 12,000 <kbd>⌘ / Ctrl ↵</kbd></span><button className="primary" disabled={!session || submitting || !prompt.trim()}>{submitting ? 'Starting…' : 'Compare answers'} <Icon name="arrow"/></button></div></form>
+          <div className="prompt-starters"><span>Try a starting point</span>{starters.map(item => <button className="quiet-button" key={item.title} disabled={submitting} onClick={() => { setPrompt(item.prompt); document.getElementById('prompt')?.focus(); }}>{item.title} <Icon name="arrow"/></button>)}</div>
+          <p className="session-explainer">{session?.provider_mode === 'mock' ? 'Offline development mode. Responses are deterministic fixtures; no AI model is called.' : 'Compares GPT-5.6 Luna and GPT-6 Luna. Prompts are sent to OpenAI; comparisons and notes are saved in this app’s database. Your browser cookie keeps your history connected.'}</p>
+        </section>}
+        <footer className="workspace-foot"><span><Icon name="lock"/>{session?.provider_mode === 'openai' ? 'Private to this browser session' : 'Local fixture mode'}</span><span>Highlights are optional · Your scorecard reflects your votes</span><div className="mobile-library"><button onClick={() => { setDialog('Notebook'); void refreshOverview(); }}>Notebook</button> · <button onClick={() => { setDialog('Scorecard'); void refreshOverview(); }}>Scores</button> · <button onClick={() => setDialog('Interaction settings')}>Settings</button></div></footer>
+      </main>
+    </div>
+    {dialog && <Dialog title={dialog} close={() => setDialog(null)} small={dialog === 'Interaction settings'}>
+      {dialog === 'Notebook' && <><p className="library-intro">Your prompts, decisions, and supporting highlights. Reopen a comparison to pick up where you left off. History belongs to this browser session.</p>{!history.items.length ? <div className="empty-library"><h3>Your notebook starts with a question.</h3><p>Compare your first pair of answers to save it here.</p><button className="primary" onClick={() => void navigate(null)}>New comparison</button></div> : history.items.map(item => <button className="history-item" key={item.id} onClick={() => void navigate(item.id)}><span>{item.prompt}<small>{dateLabel(item.created_at)} · {item.vote ? item.vote === 'tie' ? 'You chose a tie' : `You preferred ${item.vote}` : item.status === 'ready' ? 'Ready to vote' : item.status === 'failed' ? 'Incomplete pair' : 'Generating'}{item.edited ? ' · Edited after reveal' : ''}</small></span><Icon name="arrow"/></button>)}<div className="pagination"><button className="quiet-button" disabled={!offset} onClick={() => void refreshOverview(Math.max(0, offset - 20))}>Newer</button><span>Page {offset / 20 + 1}</span><button className="quiet-button" disabled={!history.has_more} onClick={() => void refreshOverview(offset + 20)}>Older</button></div></>}
+      {dialog === 'Scorecard' && <><p className="library-intro">A record of your preferences, not a universal model ranking. Each comparison counts once, using your latest vote. Changes after reveal stay labeled in your notebook.</p><div className="table-scroll"><table className="scores"><caption>Your personal comparison results</caption><thead><tr><th>Model</th><th>Wins</th><th>Ties</th><th>Losses</th></tr></thead><tbody>{scores.map(score => <tr key={score.model}><th>{score.model}</th><td>{score.wins}</td><td>{score.ties}</td><td>{score.losses}</td></tr>)}</tbody></table></div>{scores.every(score => !score.compared) && <p className="library-intro">No votes yet. Your first decision starts the scorecard.</p>}</>}
+      {dialog === 'Interaction settings' && <div className="settings-content"><div className="preference"><span>Fluid motion</span><button aria-pressed={feedback.preferences.motion} onClick={() => feedback.toggle('motion')}>{feedback.preferences.motion ? 'On' : 'Off'}</button></div><div className="preference"><span>Touch vibration</span><button aria-pressed={feedback.preferences.vibration} onClick={() => feedback.toggle('vibration')}>{feedback.preferences.vibration ? 'On' : 'Off'}</button></div><p>{feedback.reduced ? 'Your device requests reduced motion, so animation and vibration are disabled.' : 'Highlights move into your collection. Panels move without interrupting reading.'}</p><p>Vibration requires a supported touch device and browser. Every action also has visible feedback.</p></div>}
+      {overviewError && <div role="alert" className="annotation-error"><p>{overviewError} Showing the last loaded results.</p><button className="quiet-button" onClick={() => void refreshOverview(offset)}>Retry loading</button></div>}
+    </Dialog>}
+    <div id="toast" className={toast ? 'visible' : ''} role="status" aria-live="polite">{toast}</div>
+  </>;
 }

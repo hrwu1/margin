@@ -1,101 +1,78 @@
 # Margin
 
-A small comparison app: enter a prompt, read two anonymous responses, vote, and revisit the decision with optional paragraph evidence. The Python API stores the entire workflow in SQLite; the React/TypeScript client is deliberately minimal while the final design remains open.
+A compact workspace for comparing **GPT-5.6 Luna** and **GPT-6 Luna**. Enter one prompt, read two anonymous answers, optionally keep exact highlights and notes, then vote to reveal the models. Reopen any comparison from the notebook. Change a vote after reveal without losing the original reasoning; the scorecard counts only the latest choice.
 
-**Current provider: local test fixtures.** The app accepts arbitrary prompts, but its two responses are deterministic fixtures, not language-model output. No API credentials are configured and no external model calls are made. Connecting two real models remains pending the provider/credential choice. The separate `demo/` directory contains interactive design prototypes; the current Refero-based workspace is at `/workspace/`.
+Built with React + TypeScript, FastAPI, and SQLite. `demo/` contains retired visual explorations; the working application is `frontend/` + `backend/`.
 
 ## Run locally
 
-Tested with Python 3.12, Node.js 24, npm, and [uv](https://docs.astral.sh/uv/). Run from `llm-comparison-platform`:
+Requirements: Python 3.12+, [uv](https://docs.astral.sh/uv/), Node.js 24+, npm.
+
+From this project directory:
 
 ```sh
-cd frontend
-npm ci
-npm run build
-cd ../backend
-uv sync --frozen
-uv run uvicorn app.main:app --host 127.0.0.1 --port 8767 --workers 1
+cp .env.example .env  # only if .env does not already exist
+# Add your own OPENAI_API_KEY to .env. Never commit it.
+chmod 600 .env
+npm ci --prefix frontend
+npm run build --prefix frontend
+cd backend
+uv sync --locked
+uv run uvicorn app.main:app --host 127.0.0.1 --port 8767
 ```
 
-Open **http://127.0.0.1:8767/**. The API serves the built frontend on the same origin. API documentation is at `/docs`. Build the frontend before starting the API.
+Open **http://127.0.0.1:8767/**. Keep one server process; do not add multiple workers. The backend reads the project-root `.env` automatically, with exported environment variables taking precedence. The key stays on the server. The frontend build never reads it.
 
-For frontend development, keep the API running and run `npm run dev` from `frontend/`. Open http://127.0.0.1:5174/; Vite proxies `/api` to port 8767. Use the same hostname consistently because browser cookies are hostname-scoped.
+New checkouts need their own API key for live mode. `.env`, virtual environments, generated frontend files, SQLite files and logs under `backend/data/` are ignored by Git.
 
-For the static design demos: `python3 -m http.server 8766 --bind 127.0.0.1 --directory demo` from the project root.
+For offline development, explicitly set `MARGIN_PROVIDER=mock`. The interface labels these deterministic fixtures; no network request or AI model is used. There is no fallback from live failures to mock answers.
 
-- **Current interactive workspace: http://127.0.0.1:8766/workspace/**. Compact paired answers, a shared prompt, and an optional Highlights drawer. Select words in text/code or use Highlight to save a whole paragraph; keep multiple highlights from either answer, each with an optional note. Add optional overall reasoning, then vote to reveal the fictional model names. Drafts and votes persist on this device; Change vote lets you revise A/B/tie while preserving highlights/notes, labels actual revisions Edited after reveal, and updates the scorecard; the notebook reopens saved highlights and notes and the scorecard follows model identities when sides swap. Existing saved passages migrate to highlights. Highlights and notes become read-only when you vote; vote revisions preserve them.
-- The workspace uses fluid panel resizing, local state transitions, and in-place identity reveal. Settings can disable motion; system reduced-motion takes precedence. Optional vibration requires a supported touch device/browser and has not been physically tested. Phone layouts use answer tabs and a Highlights sheet.
-- Retired design explorations remain available for history at `/bold/`, `/directions/`, and `/`. They are not approved design targets.
-- All demos are standalone HTML/CSS/JS with prewritten answers and fictional models. They do not call the API or modify SQLite. The new design has not been integrated into React. Its exact excerpts, two-sided evidence, and freeform notes are prototype features and will need API/schema work if adopted.
-- Prototype checks: `node --test demo/demo.test.mjs demo/directions/app.test.mjs demo/bold/*.test.mjs demo/workspace/*.test.mjs`.
-
-## Configuration and data
-
-Export variables in the backend process; `.env.example` documents them and is **not automatically loaded**.
+### Environment
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `MARGIN_PROVIDER` | `mock` | Explicit local test provider. Other values fail startup rather than silently returning mock data. |
-| `MARGIN_DATABASE_PATH` | `backend/data/margin.sqlite3` | SQLite file; use an absolute path to store it elsewhere. |
-| `MARGIN_MODEL_TIMEOUT` | `30` | Per-response timeout in seconds; maximum 120. |
-| `MARGIN_MAX_ACTIVE` | `4` | Server-wide active comparisons; maximum 16. Each browser session can run one at a time. |
-| `MARGIN_COOKIE_SECURE` | `false` | Use `true` when serving through HTTPS. Local HTTP needs `false`. |
+| `OPENAI_API_KEY` | required in live mode | Server-only OpenAI project key |
+| `MARGIN_PROVIDER` | `openai` | `openai` or explicit `mock` |
+| `MARGIN_DATABASE_PATH` | `backend/data/margin.sqlite3` | SQLite file |
+| `MARGIN_MODEL_TIMEOUT` | `90` | Per-model deadline, up to 120 seconds |
+| `MARGIN_MAX_ACTIVE` | `4` | Maximum concurrent comparisons across sessions, up to 16 |
+| `MARGIN_COOKIE_SECURE` | `false` | Set `true` when serving over HTTPS |
 
-Database files, `.env` files, build outputs, dependencies, and virtual environments are ignored by Git. Tables are initialized automatically and tracked with SQLite `user_version=1`. Existing data is preserved on startup. Unknown newer schemas are rejected.
+Both exact model IDs are configured in `backend/app/providers.py`. They receive the same prompt and settings: Responses API, low reasoning effort, 4,096 output-token limit, and `store=false`. Output limits include reasoning tokens; truncated, refused, failed or timed-out answers cannot be voted on. Paid requests are never automatically retried.
 
-Anonymous sessions use a random HTTP-only, SameSite cookie. Only the token hash is stored in the database. Comparisons and scores belong to that session; another browser/session receives no access to them. Clearing the cookie starts a new history and does not delete the old server records. There is no account recovery or cross-device sync.
+For frontend development, run the backend as above, then `npm run dev --prefix frontend`. Vite binds port 5174 and proxies `/api` to port 8767.
 
-## API contract
-
-All mutations require `X-Margin-Client: web`; JSON requests also use `Content-Type: application/json`. Browser mutations must come from the same origin. There is no cross-origin API configuration.
-
-| Endpoint | Behavior |
-| --- | --- |
-| `POST /api/session` | Create or resume an anonymous session; sets the HTTP-only cookie. |
-| `POST /api/comparisons` | Accept `{ "request_id": "UUID", "prompt": "…" }`; return a persisted comparison immediately. |
-| `GET /api/comparisons/{id}` | Read both response states and the saved vote, if any. |
-| `POST /api/comparisons/{id}/vote` | Accept `choice` (`A`, `B`, `tie`), optional `reason`, and optional `evidence`. |
-| `GET /api/comparisons?limit=20&offset=0` | Read this session's newest-first history; `has_more` supports pagination. |
-| `GET /api/scores` | Counts derived from this session's persisted votes. |
-| `GET /api/health` | Process health and explicit provider mode. |
-
-Example vote body:
-
-```json
-{
-  "choice": "A",
-  "reason": "Clarity",
-  "evidence": { "side": "A", "paragraph_index": 1 }
-}
-```
-
-Evidence uses a zero-based index into the response's returned `paragraphs` array. The server validates the index and returns the exact stored quote. Evidence can refer to either answer, including a weakness in the answer that lost. Supported reasons are Clarity, Depth, Practicality, and Follows the prompt. Both fields are optional.
-
-## Design decisions
-
-- **Clear module responsibilities:** `backend/app/db.py` owns transactions and queries; `providers.py` defines the async provider interface and local fixture; `main.py` owns HTTP validation, session boundaries, generation lifecycle, and public response shaping. `config.py` reads runtime settings. The frontend's typed API client is separate from its comparison/voting component.
-- **Persist first, then generate:** a comparison and both randomly assigned response slots are committed before calls start. The two calls run concurrently and save their individual outcomes. The client polls, so a completed answer remains visible while the other is pending or failed.
-- **Honest blind comparison:** model identifiers are absent from response payloads until the vote is saved. This is an API rule, not a CSS trick. Response text itself can still contain a provider's self-identification; the app does not rewrite model output.
-- **Idempotent creation:** `(session, request_id)` is unique. Repeating the same request returns the existing comparison; changing its prompt with the same ID returns 409. The client retains its request ID after a network failure. Active-work limits return 429.
-- **One immutable vote:** the database primary key and a short write transaction prevent concurrent duplicate votes. Repeating the identical vote returns the saved result; changing it after reveal returns 409. A vote requires two successful responses. Scores are queried from votes, never incremented in separate counters.
-- **Failure boundaries:** each response has a deadline. Empty/oversized output and provider errors become safe per-response messages. Provider exception strings are not returned or logged because they may contain prompts or credentials. No automatic model-call retries occur.
-- **Restart behavior:** pending work becomes interrupted/failed when the server starts. Already completed answers and votes remain intact. This process-local task runner is intentionally limited to **one API worker**; use a durable job queue before running multiple workers or hosts.
-- **Small persistence layer:** SQLite uses foreign keys, WAL, a busy timeout, a session/history index, and bound query parameters. Database operations run outside the async event loop. It is suitable for the assessment's local single-server scope.
-- **Minimal UI:** text is rendered through React without raw HTML. Voting, reason/evidence, failure messages, history, pagination, and score counts are functional. Markdown polish, streaming tokens, and final visual design are deferred.
-
-## Verification
+## Checks
 
 ```sh
 cd backend
-uv run pytest -q
+MARGIN_PROVIDER=mock uv run pytest -q
 cd ../frontend
+npm test
 npm run build
 ```
 
-The backend suite covers session isolation, request deduplication, concurrent voting, evidence bounds, model identity when A/B sides swap, tie counts, SQL persistence, hidden model names, partial completion, timeouts, invalid output, safe provider errors, same-origin mutations, input validation, and restart recovery. Tests use temporary databases and injected providers; they make no live model calls.
+Backend tests cover source-validated highlights, Unicode offsets, migration from schema v1, session isolation, creation idempotency, concurrent generation, partial failures, safe provider errors, annotation freezing, stale-write rejection, vote revisions, derived scores and restart recovery. Provider contract tests do not spend API credits. Small live smoke requests separately verified both exact models.
 
-The browser acceptance path is: enter a prompt → receive both responses → mark a paragraph → choose a reason → vote → view scorecard/history → reopen → reload. Check this path on desktop and phone widths. `GUIDELINES.md` records completed checks and remaining work.
+Browser verification covers live generation, text/code highlights, notes, autosave before voting, reload/restart persistence, model reveal, editable votes and score updates, notebook navigation, light/dark modes, keyboard focus, and phone widths. Physical-device vibration and mobile selection handles require real-device testing.
 
-Current limitations: no real model integration yet, no deployment, and no final frontend design. Live API behavior and billing are unverified. This is not ready to claim the assessment's two-real-model requirement is complete.
+## Implementation and product decisions
 
-Implementation references: [FastAPI lifespan](https://fastapi.tiangolo.com/advanced/events/), [Python SQLite](https://docs.python.org/3.12/library/sqlite3.html), [Vite](https://vite.dev/guide/), and [React createRoot](https://react.dev/reference/react-dom/client/createRoot).
+- **Backend boundaries:** `config.py` loads server settings, `providers.py` owns model calls, `db.py` owns transactions/migrations, and `main.py` owns validation, sessions and routes. The provider interface also supports deterministic tests.
+- **Durable work first:** a comparison and two shuffled response slots are persisted before concurrent generation begins. Completed answers are independently saved. The client polls for completion; there is no token streaming. On restart, unfinished responses become explicit interrupted failures while completed answers remain intact.
+- **Anonymous sessions:** a random, HTTP-only SameSite cookie connects this browser to its comparisons. Only a hash is stored. Every history, answer, annotation, vote and score query is session-scoped. Model identities are omitted from answer payloads until voting. Clearing cookies loses access to the session's history; there is no account recovery or device sync.
+- **Evidence without friction:** highlights are optional. Multiple full passages or exact excerpts from either answer can carry their own notes, alongside an overall reason and note. The backend verifies every quote against stored source text. Unicode offsets use code points consistently in Python and TypeScript.
+- **Honest revision:** annotations become read-only with the first vote. A separate vote revision changes the latest choice and marks it “Edited after reveal.” Scores are derived from persisted votes; no duplicate counters or inflated totals.
+- **Save correctness:** annotation saves are serialized, typing is debounced, and voting/navigation flush pending edits. Optimistic revision numbers reject stale writes from another tab. Failed saves remain visible and prevent accidental navigation; retry or deliberately reload the saved version.
+- **Readable and safe output:** responses support paragraphs, headings, fenced code, inline code and bold text while retaining exact source positions. Other Markdown remains source text; HTML is never executed, and model-supplied images are not loaded.
+- **Interaction design:** the approved Refero-informed compact shell, independent reading panes, optional highlights drawer, excerpt transfer, theme preference, mobile A/B tabs and editable vote dock remain intact. Motion respects reduced-motion preferences. Vibration is capability-aware and always has a visible equivalent.
+
+API: `POST /api/session`, `POST /api/comparisons`, `GET /api/comparisons`, `GET /api/comparisons/{id}`, `PUT /api/comparisons/{id}/annotations`, `POST /api/comparisons/{id}/vote`, `PATCH /api/comparisons/{id}/vote`, and `GET /api/scores`. Mutation requests require `X-Margin-Client: web` and same-origin browser requests. API responses are not cached. See `/docs` for schemas.
+
+## Deliberate limits
+
+This is a local assessment app, not an internet-hardened hosted service. It uses one server process, SQLite and in-process generation. Before public hosting, add deployment authentication/abuse limits, a durable job queue, operational monitoring, backups/retention, and a clear account/privacy policy. A shared anonymous internet endpoint could otherwise spend the project's API credits. API prompts leave the machine for OpenAI; notes are stored only in the app's SQLite database.
+
+A personal scorecard records preferences from a small, self-selected sample; it is not a global benchmark. Future improvements should prioritize broader Markdown support, token streaming, and real-device accessibility testing before adding more visual directions.
+
+Implementation plans, source requirements, reference decisions and delivery evidence are maintained in `GUIDELINES.md`. No push or deployment is part of this change.
