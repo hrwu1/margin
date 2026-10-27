@@ -1,13 +1,16 @@
-import type { Comparison } from './api';
+import type { Comparison, ModelPair } from './api';
 
 export const MAX_QUESTIONS = 20;
 export type QueueItem = {
   requestId: string; prompt: string; id?: string;
+  models?: ModelPair;
   status: 'queued' | 'starting' | Comparison['status'];
 };
 export type QueueState = { items: QueueItem[]; paused: boolean; error: string };
 export const emptyQueue = (): QueueState => ({ items: [], paused: true, error: '' });
 export const splitQuestions = (text: string) => text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+const validModels = (models: unknown): models is ModelPair => Array.isArray(models) && models.length === 2
+  && models.every(model => typeof model === 'string' && model.length > 0 && model.length <= 200) && models[0] !== models[1];
 
 export function restoreQueue(raw: string | null): QueueState {
   try {
@@ -16,6 +19,7 @@ export function restoreQueue(raw: string | null): QueueState {
     if (!value || !Array.isArray(value.items) || value.items.length > MAX_QUESTIONS) return emptyQueue();
     if (!value.items.every((item: QueueItem) => item && typeof item.prompt === 'string' && item.prompt.trim() && item.prompt.length <= 12000
       && typeof item.requestId === 'string' && uuid.test(item.requestId)
+      && (item.models === undefined || validModels(item.models))
       && ['queued', 'starting', 'pending', 'ready', 'failed'].includes(item.status)
       && (item.id === undefined || typeof item.id === 'string' && uuid.test(item.id))
       && (!['pending', 'ready', 'failed'].includes(item.status) || !!item.id))) return emptyQueue();
@@ -38,12 +42,13 @@ export class QuestionQueue {
   snapshot = () => this.state;
   private update(state: QueueState) { this.state = state; this.listeners.forEach(listener => listener()); }
   get unfinished() { return this.state.items.some(item => !['ready', 'failed'].includes(item.status)); }
-  start(prompts: string[]) {
+  start(prompts: string[], models: ModelPair) {
     if (this.busy || this.unfinished) throw new Error('Finish or clear the current question list first.');
+    if (!validModels(models)) throw new Error('Choose two distinct models.');
     if (!prompts.length || prompts.length > MAX_QUESTIONS || prompts.some(prompt => !prompt.trim() || prompt.trim().length > 12000)) {
       throw new Error('Add 1–20 questions, each between 1 and 12,000 characters.');
     }
-    this.update({ items: prompts.map(prompt => ({ prompt: prompt.trim(), requestId: crypto.randomUUID(), status: 'queued' })), paused: false, error: '' });
+    this.update({ items: prompts.map(prompt => ({ prompt: prompt.trim(), models: [...models], requestId: crypto.randomUUID(), status: 'queued' })), paused: false, error: '' });
   }
   pause() { this.update({ ...this.state, paused: true }); }
   resume() { this.update({ ...this.state, paused: false, error: '' }); }
@@ -64,7 +69,7 @@ export class QuestionQueue {
         this.update({ ...this.state, items: this.state.items.map((value, i) => i === index ? item : value) });
       }
       const result = await this.request(item.id ? `/comparisons/${item.id}` : '/comparisons', item.id ? undefined : {
-        method: 'POST', body: JSON.stringify({ prompt: item.prompt, request_id: item.requestId }),
+        method: 'POST', body: JSON.stringify({ prompt: item.prompt, models: item.models, request_id: item.requestId }),
       });
       this.update({ ...this.state,
         items: this.state.items.map((value, i) => i === index ? { ...value, id: result.id, status: result.status } : value),

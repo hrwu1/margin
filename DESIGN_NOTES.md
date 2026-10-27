@@ -17,12 +17,14 @@ React workspace → same-origin FastAPI → SQLite
                            ↓
                     provider interface
                      ↙           ↘
-              GPT-5.6 Luna     GPT-6 Luna
+              Selected GPT    Selected GPT
 ```
 
 **Small, explicit boundaries.** React and TypeScript own interaction state and typed API calls. FastAPI validates requests and coordinates generation. `config.py` loads settings, `providers.py` handles external calls, and `db.py` owns SQL transactions and schema migration. SQLite provides durable local storage without another service. Sessions, comparisons, responses, votes, and annotation documents have distinct responsibilities; annotation JSON keeps a small collection of highlights together.
 
-**Persist before starting work.** A comparison and its shuffled A/B slots are saved before two concurrent provider calls begin. Each completed answer is persisted independently, so a slow or failed peer does not erase a usable result. Both models receive the same prompt and generation settings. Polling exposes completed answers without the extra partial-text and reconnect contracts of token streaming. Only two successful responses permit a vote.
+**Persist before starting work.** A comparison and its shuffled A/B slots are saved before two concurrent provider calls begin. Each completed answer is persisted independently, so a slow or failed peer does not erase a usable result. Both models receive the same prompt, with endpoint-compatible generation parameters. Polling exposes completed answers without the extra partial-text and reconnect contracts of token streaming. Only two successful responses permit a vote.
+
+**Discover before selecting.** The backend caches the OpenAI model list for five minutes and filters it to GPT text families. Users select two distinct IDs; the API checks membership and the database binds both IDs to the request ID. Catalog failures block new generation but do not block saved history or scores. A model-list entry is not proof that a generation request will succeed; provider errors remain explicit, and paid calls never retry automatically.
 
 Creation uses a session-scoped request ID to avoid duplicate generation when the same creation request is repeated. Timeouts, output limits, one pending comparison per session, and a global concurrency cap bound work. Errors have safe user-facing messages; paid calls are not automatically retried. On restart, unfinished responses become explicitly interrupted while completed data survives. This is recovery of saved state, not resumption of a job.
 
@@ -41,6 +43,8 @@ A clean Git clone was checked by following the README, without copying an API ke
 - Frontend tests check source formatting, highlight ranges, and score calculations, including overlapping marks, ties, revised votes, and historical model pairs. Browser checks in the clean clone exercised offline generation, annotations, vote/revision, notebook history, scores, and reopening after a real server restart. Independent HTTP checks verified session isolation and that private configuration/database files are not served.
 
 During implementation, browser checks separately exercised real responses from both exact model IDs, reveal, text/code highlights, notes, save failure/retry, vote revisions, reloads, and persistence after restart. Desktop and 390px/320px phone layouts were checked in both themes, including focus handling and reduced-motion support. These browser/live checks are manual evidence, not an automated end-to-end suite. Physical-device vibration and mobile selection handles, a full assistive-technology audit, and production load behavior remain unverified. The backend suite currently emits one upstream Starlette/httpx deprecation warning.
+
+The selectable-model update passes **67 backend tests** and **21 frontend tests**, plus TypeScript checking and the production build. The live model-list API returned 72 GPT text entries; short generations succeeded with GPT-4o Mini, GPT-5.4 nano, and GPT-6 Luna. A two-question list used the chosen pair throughout generation, voting, and reload. Desktop and narrow-screen browser checks covered selectors, duplicate prevention, keyboard focus, catalog failure/recovery, and saved identities. Listed GPT-3.5 models returned model-unavailable errors; endpoint contracts for other models are fixture-tested, not proof of live access.
 
 ## With more time
 

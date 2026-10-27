@@ -133,6 +133,10 @@ class Database:
             if previous:
                 if previous["prompt"] != prompt:
                     raise Conflict("This request ID was already used with a different prompt.")
+                previous_models = {row['model'] for row in connection.execute(
+                    'SELECT model FROM responses WHERE comparison_id = ?', (previous['id'],))}
+                if previous_models != set(models):
+                    raise Conflict('This request ID was already used with different models.')
                 return previous["id"], False
             if connection.execute("SELECT 1 FROM comparisons WHERE session_hash = ? AND status = 'pending'", (session,)).fetchone():
                 raise Capacity("A comparison is already running in this browser. Wait for it to finish.")
@@ -266,7 +270,7 @@ class Database:
             """, (session, limit + 1, offset)).fetchall()
         return {'items': [dict(row) for row in rows[:limit]], 'has_more': len(rows) > limit}
 
-    def scores(self, session: str, models: tuple[str, str]):
+    def scores(self, session: str, models: tuple[str, ...]):
         result = {model: {'model': model, 'wins': 0, 'ties': 0, 'losses': 0, 'compared': 0} for model in models}
         with self.connect() as connection:
             rows = connection.execute("""

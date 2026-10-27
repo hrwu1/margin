@@ -18,6 +18,24 @@ Keep Margin easy to run from a clean checkout: one prompt or a question list, tw
 
 Document the goal and completion criteria here before implementation. Make focused changes, preserve existing work, test affected behavior, and commit coherent steps. Use an isolated worktree for large or risky changes. Publishing requires an explicit request.
 
+## Selectable OpenAI models
+
+Goal: let users choose exactly two distinct GPT text-generation models available to the backend's OpenAI API key before each comparison.
+
+- [x] Discover available GPT text models through OpenAI's model-list API, keeping aliases and snapshots and excluding non-text modalities.
+- [x] Route supported text models to their documented generation endpoints, keeping credentials server-side and avoiding automatic paid retries.
+- [x] Validate and persist the chosen pair, including request-ID conflicts, while preserving randomized A/B assignment, reveal after voting, history, and scores.
+- [x] Add labelled, keyboard-accessible selectors, loading/error/retry states, and responsive styling; preserve offline fixtures.
+- [x] Update the README; verify automated checks, desktop/mobile interaction, and a bounded live comparison with inexpensive models.
+- [x] Integrate the concurrently added question-list workflow: freeze the chosen model pair for every queued question, preserve it across reload/retry, and keep older saved lists recoverable.
+- [ ] Commit tested steps, merge cleanly into the original checkout, and remove the temporary worktree.
+
+Design reference lock: the existing Margin composer owns typography, light/dark surface colors, spacing, borders, and accent roles. Use native selects with visible labels and focus states, following Refero's bundled craft guidance for forms. Keep the pair controls together above the prompt; selection order must not imply answer A/B. No new imagery or dependencies. Live Refero references were unavailable because the subscription was inactive.
+
+Completion requires model discovery and selection to drive actual generation, safe failures without fallback, persistent model identities and scores, passing regression checks, and documented live-test limits. Use only temporary verification databases; preserve the user's existing data and local configuration.
+
+Verification: 67 backend tests, 21 frontend tests, TypeScript checking, and the production build pass. The live catalog returned 72 GPT text entries. Short generations succeeded with GPT-4o Mini, GPT-5.4 nano, and GPT-6 Luna; a two-question live list retained the chosen GPT-4o Mini/GPT-6 Luna pair through both comparisons, voting, and reload. Browser checks covered desktop, 390px and 320px layouts, both themes, keyboard focus, duplicate prevention, model-list failure/recovery, anonymous answers, reveal, and scores. OpenAI returned model-unavailable errors for the listed legacy GPT-3.5 models; these errors stayed explicit without fallback or paid retries. Other models were not live-tested. Temporary databases isolated all verification from existing user data. The upstream Starlette/httpx deprecation warning remains.
+
 ## Public repository preparation
 
 Goal: remove private development information from all publishable history and verify the documented setup from a clean clone.
@@ -77,4 +95,24 @@ Completion: valid CSV questions can be reviewed, edited, and compared through th
 
 CSV parser verification: 11 new tests cover UTF-8/BOM, CRLF, multiline cells, escaped quotes, column/header selection, empty rows, duplicate questions, all-or-nothing limits, malformed input, and bounded file dimensions. All 28 frontend tests and the production build pass. TypeScript permits explicit .ts imports so the same parser dependencies run directly in Node tests.
 
-CSV UI verification: 28 frontend tests, 32 backend tests, TypeScript, and the build pass. Browser tests cover native file selection, auto/manual column mapping, headerless imports, preserving draft text, five queued comparisons, quoted multiline code, Unicode, no metadata in requests, preview gating, cancellation, invalid files, late file reads, same-file reselection, mobile light/dark layouts, and reduced motion. No additional paid requests were made. Concurrent model-selection and motion changes will be integrated and rechecked before delivery.
+CSV UI verification: 28 frontend tests, 32 backend tests, TypeScript, and the build pass. Browser tests cover native file selection, auto/manual column mapping, headerless imports, preserving draft text, five queued comparisons, quoted multiline code, Unicode, no metadata in requests, preview gating, cancellation, invalid files, late file reads, same-file reselection, mobile light/dark layouts, and reduced motion. No additional paid requests were made. Concurrent model-selection and motion changes were integrated in the isolated worktree; their implementation and documentation were preserved. The combined suite passes 67 backend tests and 32 frontend tests, TypeScript, and the production build. The CSV browser workflow also passes with selected model pairs retained on every request and comparison disabled when model discovery is unavailable.
+
+## Motion and feedback clarity
+
+Goal: make the existing interaction preferences understandable and their effective device state truthful; improve spatial feedback while preserving reading, selection, saved decisions, and the question queue. The user approved renaming the menu, explaining each control, disabling unsupported vibration, and improving fluid motion.
+
+Reference lock: retain Margin's compact paired workspace, current type, neutral light/dark surfaces, and existing accent roles. Refero live style research returned NO_SUBSCRIPTION; use its bundled Motion & Micro-interactions and Craft Details guides. Motion communicates feedback and continuity: quick control responses, soft panel entry, a passage-to-Highlights transfer and clear vote acknowledgement. UI/UX guidance reinforces reduced-motion support and limiting simultaneous movement. No palette redesign, imagery, dependencies, decorative loops, or backend changes.
+
+- [x] Replace Interaction settings with Motion & feedback; use labelled switches, concrete descriptions, effective On/Off/Unavailable states, system-override guidance, and a safe preview that does not alter comparisons.
+- [x] Keep saved preferences compatible; derive vibration availability from touch/browser capability and respect reduced motion. Make storage failures explicit and keep physical vibration claims modest.
+- [x] Improve interruptible highlight transfer, panel/control transitions and vote feedback; cancel transient effects on navigation/visibility/reduced-motion changes without changing saves, focus, selection or reading state.
+- [x] Test preference/capability combinations and existing frontend workflows; build/typecheck. Browser-check motion on/off, preview, highlights/votes, keyboard, both themes, narrow screens and reduced motion in an isolated offline session.
+- [x] Commit tested changes, integrate cleanly with concurrent work, rebuild the local app, and record verification and physical-device limits. Attempt managed-worktree cleanup without bypassing protection.
+
+
+Verification: 19 frontend tests pass, including all 32 combinations of motion/vibration preferences, system reduced-motion, touch input and vibration API availability, plus legacy/malformed preference restoration. TypeScript and production build pass. The existing queue, source-offset and scorecard tests remain green.
+
+Browser checks in an isolated offline session verified desktop and 390px/320px layouts in light/dark, accessible switch labels and Space/Escape behavior, focus restoration, preview replay and single-flight cleanup, motion-off updates, saved preference reload, actual highlight/note saving, voting/reveal/revision and retained reasoning. Local-only capability fixtures verified system overrides, a rejected vibration request, and blocked storage guidance; they are not shipped. No browser errors were observed. No paid model calls or existing comparison data were used. Physical-device vibration and mobile selection handles remain unverified.
+
+
+Integration: plan and implementation were fast-forwarded cleanly into the main checkout, and its production frontend was rebuilt. The live app was checked with Motion & feedback open and its preview working; existing comparisons were not changed. Temporary test server and browser tab were closed, the viewport was reset, and capability fixtures were removed by the production build. Managed cleanup was attempted but the app protected its primary checkout, so the clean merged worktree remains. No push or deployment was performed. Backend code was unchanged; this step reran frontend checks and the browser workflow rather than the backend suite.

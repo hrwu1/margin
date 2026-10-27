@@ -22,7 +22,7 @@ ERRORS = {
     'credentials': 'The server’s OpenAI key is invalid or lacks permission. Check the server configuration.',
     'quota': 'The OpenAI project has no available API quota. Check its billing or credits.',
     'rate_limit': 'OpenAI is temporarily rate limiting requests. Wait before starting a new comparison.',
-    'model_unavailable': 'A configured model is unavailable to this OpenAI project.',
+    'model_unavailable': 'A selected model is unavailable to this OpenAI project. Choose another model.',
     'incomplete': 'This answer reached its output limit. Try a narrower prompt.',
     'refusal': 'This model declined the request. Try a different prompt.',
     'timeout': 'This response took too long. Start a new comparison to try again.',
@@ -36,6 +36,14 @@ class CreateComparison(BaseModel):
     model_config = ConfigDict(extra='forbid')
     request_id: UUID
     prompt: str = Field(min_length=1, max_length=12000)
+    models: tuple[str, str] | None = None
+
+    @field_validator('models')
+    @classmethod
+    def distinct_models(cls, value):
+        if value is None or value[0] == value[1]:
+            raise ValueError('Choose two distinct models.')
+        return value
 
     @field_validator('prompt', mode='before')
     @classmethod
@@ -104,8 +112,6 @@ def public_comparison(record):
 def create_app(settings: Settings | None = None, provider: Provider | None = None) -> FastAPI:
     settings = settings or Settings.from_environment()
     provider = provider or configured_provider(settings.provider, settings.api_key, settings.timeout_seconds)
-    if len(provider.models) != 2 or len(set(provider.models)) != 2:
-        raise ValueError('Configure exactly two distinct model identities.')
     db = Database(settings.database_path)
     tasks: set[asyncio.Task] = set()
 
@@ -150,6 +156,10 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
     for error in (NotFound, Conflict, Capacity, InvalidVote):
         app.add_exception_handler(error, domain_error)
 
+    @app.exception_handler(ProviderFailure)
+    async def provider_error(request, error):
+        return JSONResponse({'detail': 'Could not load the model list. ' + ERRORS.get(error.code, ERRORS['provider_error'])}, status_code=503)
+
     async def session(request: Request) -> str:
         token = request.cookies.get(COOKIE, '')
         hashed = sha256(token.encode()).hexdigest()
@@ -171,6 +181,13 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         response.set_cookie(COOKIE, token, httponly=True, samesite='lax', secure=settings.cookie_secure,
                             max_age=60 * 60 * 24 * 365, path='/api')
         return {'provider_mode': provider.mode, 'max_prompt_length': 12000}
+
+    @app.get('/api/models')
+    async def models(owner: Annotated[str, Depends(session)]):
+        available = await provider.list_models()
+        preferred = [model for model in ('gpt-5.6-luna', 'gpt-6-luna') if model in available]
+        defaults = (preferred + [model for model in available if model not in preferred])[:2]
+        return {'items': available, 'defaults': defaults}
 
     async def generate_response(comparison_id, side, model, prompt):
         error = None
@@ -202,7 +219,13 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
 
     @app.post('/api/comparisons')
     async def create_comparison(body: CreateComparison, response: Response, owner: Annotated[str, Depends(session)]):
-        models = list(provider.models)
+        available = await provider.list_models()
+        # Older saved queues omitted models and always used this fixed pair.
+        selected = body.models if body.models is not None else (
+            ('gpt-5.6-luna', 'gpt-6-luna') if provider.mode == 'openai' else provider.models[:2])
+        if len(selected) != 2 or any(model not in available for model in selected):
+            raise HTTPException(422, 'Choose two models from the available model list. Reload the list and try again.')
+        models = list(selected)
         secrets.SystemRandom().shuffle(models)
         identifier, created = await asyncio.to_thread(db.create_comparison, owner, str(body.request_id), body.prompt, models, settings.max_active)
         record = await asyncio.to_thread(db.get_comparison, owner, identifier)
@@ -238,7 +261,7 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
 
     @app.get('/api/scores')
     async def scores(owner: Annotated[str, Depends(session)]):
-        return {'items': await asyncio.to_thread(db.scores, owner, provider.models)}
+        return {'items': await asyncio.to_thread(db.scores, owner, ())}
 
     # API routes must remain 404s rather than falling through to the frontend.
     @app.api_route('/api/{path:path}', methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])

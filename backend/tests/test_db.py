@@ -31,6 +31,9 @@ def test_request_idempotency_and_capacity(db):
     identifier, created = db.create_comparison('alice', request_id, 'A prompt', ['cedar', 'birch'], 4)
     assert created
     assert db.create_comparison('alice', request_id, 'A prompt', ['cedar', 'birch'], 4) == (identifier, False)
+    assert db.create_comparison('alice', request_id, 'A prompt', ['birch', 'cedar'], 4) == (identifier, False)
+    with pytest.raises(Conflict, match='different models'):
+        db.create_comparison('alice', request_id, 'A prompt', ['cedar', 'maple'], 4)
     with pytest.raises(Conflict):
         db.create_comparison('alice', request_id, 'Changed prompt', ['cedar', 'birch'], 4)
     with pytest.raises(Capacity):

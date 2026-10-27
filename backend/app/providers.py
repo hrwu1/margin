@@ -1,12 +1,16 @@
 import asyncio
+import re
+import time
 from typing import Protocol
 
 import httpx
 
 
 class Provider(Protocol):
-    models: tuple[str, str]
+    models: tuple[str, ...]
     mode: str
+
+    async def list_models(self) -> tuple[str, ...]: ...
 
     async def generate(self, model: str, prompt: str) -> str: ...
 
@@ -16,6 +20,9 @@ class MockProvider:
 
     models = ('local-concise', 'local-detailed')
     mode = 'mock'
+
+    async def list_models(self) -> tuple[str, ...]:
+        return self.models
 
     async def generate(self, model: str, prompt: str) -> str:
         await asyncio.sleep(0.4 if model == self.models[0] else 0.9)
@@ -35,7 +42,7 @@ class ProviderFailure(Exception):
 
 
 class OpenAIProvider:
-    models = ('gpt-5.6-luna', 'gpt-6-luna')
+    models: tuple[str, ...] = ()
     mode = 'openai'
 
     def __init__(self, api_key: str, timeout: float = 90):
@@ -43,31 +50,75 @@ class OpenAIProvider:
             raise ValueError('Set OPENAI_API_KEY in the project .env, or explicitly use MARGIN_PROVIDER=mock for offline testing.')
         self._api_key = api_key
         self.timeout = timeout
+        self._models_until = 0
+        self._models_lock = asyncio.Lock()
 
-    async def generate(self, model: str, prompt: str) -> str:
-        if model not in self.models:
-            raise ValueError('Unknown comparison model.')
+    async def _request(self, method: str, endpoint: str, body: dict | None = None) -> dict:
         try:
             # No automatic retries: a timed-out request may already have incurred usage.
             async with httpx.AsyncClient(timeout=self.timeout) as client:
-                response = await client.post(
-                    'https://api.openai.com/v1/responses',
+                response = await client.request(
+                    method, f'https://api.openai.com/v1/{endpoint}',
                     headers={'Authorization': f'Bearer {self._api_key}'},
-                    json={'model': model, 'input': prompt, 'store': False,
-                          'reasoning': {'effort': 'low'}, 'max_output_tokens': 4096},
+                    **({'json': body} if body is not None else {}),
                 )
         except httpx.TimeoutException:
-            raise TimeoutError from None
+            raise ProviderFailure('timeout') from None
+        except httpx.RequestError:
+            raise ProviderFailure('provider_error') from None
         if response.status_code in (401, 403):
             raise ProviderFailure('credentials')
         if response.status_code == 404:
             raise ProviderFailure('model_unavailable')
         if response.status_code == 429:
-            code = response.json().get('error', {}).get('code')
+            try:
+                code = response.json().get('error', {}).get('code')
+            except (ValueError, AttributeError):
+                code = None
             raise ProviderFailure('quota' if code in ('insufficient_quota', 'billing_hard_limit_reached') else 'rate_limit')
         if response.is_error:
             raise ProviderFailure('provider_error')
-        payload = response.json()
+        try:
+            payload = response.json()
+        except ValueError:
+            raise ProviderFailure('invalid_response') from None
+        if not isinstance(payload, dict):
+            raise ProviderFailure('invalid_response')
+        return payload
+
+    async def list_models(self) -> tuple[str, ...]:
+        async with self._models_lock:
+            if time.monotonic() < self._models_until:
+                return self.models
+            payload = await self._request('GET', 'models')
+            entries = payload.get('data')
+            if not isinstance(entries, list) or any(not isinstance(item, dict) or not isinstance(item.get('id'), str) for item in entries):
+                raise ProviderFailure('invalid_response')
+            # /models has no modality metadata. Keep numbered GPT text families,
+            # including snapshots, coding and search; exclude audio/image variants.
+            self.models = tuple(sorted({item['id'] for item in entries
+                                        if re.match(r'^gpt-\d', item['id'])
+                                        and not re.search(r'-(audio|realtime|transcribe|tts|image)(-|$)', item['id'])}))
+            self._models_until = time.monotonic() + 300
+            return self.models
+
+    async def generate(self, model: str, prompt: str) -> str:
+        if model not in self.models:
+            raise ValueError('Unknown comparison model.')
+        if model.startswith('gpt-3.5-turbo-instruct'):
+            payload = await self._request('POST', 'completions',
+                                          {'model': model, 'prompt': prompt, 'max_tokens': 1024})
+            return self._completion_text(payload, chat=False)
+        if model.startswith('gpt-3.5-') or re.match(r'^gpt-4($|-)', model) or '-search-' in model:
+            payload = await self._request('POST', 'chat/completions',
+                                          {'model': model, 'messages': [{'role': 'user', 'content': prompt}],
+                                           'store': False, 'max_completion_tokens': 4096})
+            return self._completion_text(payload, chat=True)
+        body = {'model': model, 'input': prompt, 'store': False, 'max_output_tokens': 4096}
+        # Preserve the original pair's settings; other models use their defaults.
+        if model in ('gpt-5.6-luna', 'gpt-6-luna'):
+            body['reasoning'] = {'effort': 'low'}
+        payload = await self._request('POST', 'responses', body)
         if payload.get('status') == 'incomplete':
             raise ProviderFailure('incomplete')
         if payload.get('status') != 'completed':
@@ -80,6 +131,24 @@ class OpenAIProvider:
         if not content.strip():
             raise ProviderFailure('invalid_response')
         return content
+
+    @staticmethod
+    def _completion_text(payload: dict, *, chat: bool) -> str:
+        choices = payload.get('choices') or []
+        if not choices:
+            raise ProviderFailure('invalid_response')
+        choice = choices[0]
+        if choice.get('finish_reason') == 'length':
+            raise ProviderFailure('incomplete')
+        message = choice.get('message') or {}
+        if choice.get('finish_reason') == 'content_filter' or message.get('refusal'):
+            raise ProviderFailure('refusal')
+        if choice.get('finish_reason') != 'stop':
+            raise ProviderFailure('invalid_response')
+        text = message.get('content') if chat else choice.get('text')
+        if not isinstance(text, str) or not text.strip():
+            raise ProviderFailure('invalid_response')
+        return text
 
 
 def configured_provider(name: str, api_key: str = '', timeout: float = 90) -> Provider:
