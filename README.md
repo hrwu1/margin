@@ -14,7 +14,7 @@ Built with React, TypeScript, FastAPI, and SQLite. See [Design notes](DESIGN_NOT
 - Node.js **24 or newer**, with npm.
 - For live answers: an OpenAI API key with API credits and access to both configured models. Offline mode needs no key.
 
-The commands below use a macOS/Linux shell. Run them from the project root, the folder containing `backend/` and `frontend/`.
+Clone or download this repository, then open a terminal in its root, the folder containing `backend/` and `frontend/`. The commands below use a macOS/Linux shell. No database server, existing database, or local configuration is needed.
 
 ### 1. Install and build
 
@@ -122,6 +122,7 @@ DESIGN_NOTES.md    Engineering decisions and verification
 ### Troubleshooting
 
 - **The page is missing or out of date:** run `npm run build --prefix frontend` from the project root, then restart the backend.
+- **Port 8767 is already in use:** replace `--port 8767` with an available port, such as `--port 8877`, in both server commands, and open `http://127.0.0.1:8877/`. Use the same address after restarts to keep the browser session. Frontend development uses the proxy configured in `frontend/vite.config.ts`; update its target too if you change the backend port.
 - **Live generation fails:** check the visible error, API key, API credits, model access, and network connection. The exact configured model IDs must be available to your API project. Offline mode remains available for testing the app.
 - **An answer is interrupted or times out:** the existing comparison retains whatever completed. Start a new comparison to retry; this makes new model requests.
 - **A save conflicts with another tab:** the app rejects the stale update. Preserve any text you need before reloading the saved version.
