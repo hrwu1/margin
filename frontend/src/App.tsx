@@ -1,3 +1,4 @@
+import { MotionSettings } from './MotionSettings';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage, latestComparison } from './api';
 import type { Comparison, HistoryPage, ModelCatalog, Score, Session } from './api';
@@ -36,7 +37,7 @@ export function App() {
   const [recent, setRecent] = useState<HistoryPage['items']>([]);
   const [offset, setOffset] = useState(0);
   const [scores, setScores] = useState<Score[] | null>(null);
-  const [dialog, setDialog] = useState<'Notebook' | 'Scorecard' | 'Interaction settings' | null>(null);
+  const [dialog, setDialog] = useState<'Notebook' | 'Scorecard' | 'Motion & feedback' | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [theme, setTheme] = useState(document.documentElement.dataset.theme || 'light');
   const [toast, setToast] = useState('');
@@ -46,6 +47,7 @@ export function App() {
   const overviewVersion = useRef(0);
   const navigationVersion = useRef(0);
   const feedback = useFeedback();
+  useEffect(() => feedback.cancel, [id, dialog, feedback.cancel]);
   const visible = comparison?.id === id ? comparison : null;
   const validModels = !modelsLoading && !modelError && models[0] !== models[1] && models.every(model => catalog?.items.includes(model));
   const notify = useCallback((message: string) => setToast(message), []);
@@ -183,7 +185,7 @@ export function App() {
           <button className="nav-button" title="Scorecard" onClick={() => { setDialog('Scorecard'); void refreshOverview(); }}><Icon name="scores"/><span>Scorecard</span></button>
         </nav>
         <nav className="sidebar-section recent-list" aria-label="Recent comparisons"><p className="section-label">Recent comparisons</p>{recent.slice(0, 8).map(item => <button key={item.id} className="sample-button" title={item.prompt} aria-current={item.id === id} onClick={() => void navigate(item.id)}><Icon name={item.vote ? 'check' : 'compare'}/><span className="recent-copy">{item.prompt.slice(0, 70)}{item.prompt.length > 70 ? '…' : ''}<small>{dateLabel(item.created_at)} · {item.vote ? item.vote === 'tie' ? 'Tie' : `Preferred ${item.vote}` : item.status === 'ready' ? 'Ready to compare' : item.status === 'failed' ? 'Incomplete' : 'Generating'}</small></span></button>)}</nav>
-        <div className="sidebar-bottom"><div className="session-label"><Icon name="lock"/><span>Anonymous session</span></div><button className="nav-button" title="Interaction settings" onClick={() => setDialog('Interaction settings')}><Icon name="settings"/><span>Interaction settings</span></button></div>
+        <div className="sidebar-bottom"><div className="session-label"><Icon name="lock"/><span>Anonymous session</span></div><button className="nav-button" title="Motion & feedback" onClick={() => setDialog('Motion & feedback')}><Icon name="settings"/><span>Motion & feedback</span></button></div>
       </aside>
       <main className="workspace" id="main">
         <header className="topbar"><div className="breadcrumb"><span>Comparisons</span><span className="slash">/</span><strong>{visible ? visible.vote ? 'Saved decision' : 'Workspace' : 'New comparison'}</strong></div><button className="mobile-brand" aria-label="New comparison" onClick={() => void navigate(null)}>margin</button>
@@ -220,13 +222,13 @@ export function App() {
           <div className="prompt-starters"><span>Try a starting point</span>{starters.map(item => <button className="quiet-button" key={item.title} disabled={submitting} onClick={() => { setPrompt(item.prompt); document.getElementById('prompt')?.focus(); }}>{item.title} <Icon name="arrow"/></button>)}</div>
           <p className="session-explainer">{session?.provider_mode === 'mock' ? 'Offline development mode. Responses are deterministic fixtures; no AI model is called.' : 'Each comparison sends your prompt to the two selected OpenAI models. API costs vary by model. Comparisons and notes are saved in this app’s database; your browser cookie keeps your history connected.'}{listMode && ' Unsent questions are kept in this tab. Keep it open to run the list; reloading pauses new requests.'}</p>
         </section>}
-        <footer className="workspace-foot"><span><Icon name="lock"/>{session?.provider_mode === 'openai' ? 'Private to this browser session' : 'Local fixture mode'}</span><span>Highlights are optional · Your scorecard reflects your votes</span><div className="mobile-library"><button onClick={() => { setDialog('Notebook'); void refreshOverview(); }}>Notebook</button> · <button onClick={() => { setDialog('Scorecard'); void refreshOverview(); }}>Scores</button> · <button onClick={() => setDialog('Interaction settings')}>Settings</button></div></footer>
+        <footer className="workspace-foot"><span><Icon name="lock"/>{session?.provider_mode === 'openai' ? 'Private to this browser session' : 'Local fixture mode'}</span><span>Highlights are optional · Your scorecard reflects your votes</span><div className="mobile-library"><button onClick={() => { setDialog('Notebook'); void refreshOverview(); }}>Notebook</button> · <button onClick={() => { setDialog('Scorecard'); void refreshOverview(); }}>Scores</button> · <button onClick={() => setDialog('Motion & feedback')}>Motion & feedback</button></div></footer>
       </main>
     </div>
-    {dialog && <Dialog title={dialog} close={() => setDialog(null)} small={dialog === 'Interaction settings'}>
+    {dialog && <Dialog title={dialog} close={() => setDialog(null)} small={dialog === 'Motion & feedback'}>
       {dialog === 'Notebook' && <><p className="library-intro">Your prompts, decisions, and supporting highlights. Reopen a comparison to pick up where you left off. History belongs to this browser session.</p>{!history.items.length ? <div className="empty-library"><h3>Your notebook starts with a question.</h3><p>Compare your first pair of answers to save it here.</p><button className="primary" onClick={() => void navigate(null)}>New comparison</button></div> : history.items.map(item => <button className="history-item" key={item.id} onClick={() => void navigate(item.id)}><span>{item.prompt}<small>{dateLabel(item.created_at)} · {item.vote ? item.vote === 'tie' ? 'You chose a tie' : `You preferred ${item.vote}` : item.status === 'ready' ? 'Ready to vote' : item.status === 'failed' ? 'Incomplete pair' : 'Generating'}{item.edited ? ' · Edited after reveal' : ''}</small></span><Icon name="arrow"/></button>)}<div className="pagination"><button className="quiet-button" disabled={!offset} onClick={() => void refreshOverview(Math.max(0, offset - 20))}>Newer</button><span>Page {offset / 20 + 1}</span><button className="quiet-button" disabled={!history.has_more} onClick={() => void refreshOverview(offset + 20)}>Older</button></div></>}
       {dialog === 'Scorecard' && <Scorecard scores={scores} unavailable={!!overviewError} onNotebook={() => { setDialog('Notebook'); void refreshOverview(); }} onCompare={() => void navigate(null)}/>}
-      {dialog === 'Interaction settings' && <div className="settings-content"><div className="preference"><span>Fluid motion</span><button aria-pressed={feedback.preferences.motion} onClick={() => feedback.toggle('motion')}>{feedback.preferences.motion ? 'On' : 'Off'}</button></div><div className="preference"><span>Touch vibration</span><button aria-pressed={feedback.preferences.vibration} onClick={() => feedback.toggle('vibration')}>{feedback.preferences.vibration ? 'On' : 'Off'}</button></div><p>{feedback.reduced ? 'Your device requests reduced motion, so animation and vibration are disabled.' : 'Highlights move into your collection. Panels move without interrupting reading.'}</p><p>Vibration requires a supported touch device and browser. Every action also has visible feedback.</p></div>}
+      {dialog === 'Motion & feedback' && <MotionSettings feedback={feedback}/>}
       {overviewError && <div role="alert" className="annotation-error"><p>{overviewError} {scores ? 'Showing the last loaded results.' : 'Results have not loaded yet.'}</p><button className="quiet-button" onClick={() => void refreshOverview(offset)}>Retry loading</button></div>}
     </Dialog>}
     <div id="toast" className={toast ? 'visible' : ''} role="status" aria-live="polite">{toast}</div>

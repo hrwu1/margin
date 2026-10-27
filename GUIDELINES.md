@@ -34,7 +34,7 @@ Design reference lock: the existing Margin composer owns typography, light/dark 
 
 Completion requires model discovery and selection to drive actual generation, safe failures without fallback, persistent model identities and scores, passing regression checks, and documented live-test limits. Use only temporary verification databases; preserve the user's existing data and local configuration.
 
-Verification: 67 backend tests, 19 frontend tests, TypeScript checking, and the production build pass. The live catalog returned 72 GPT text entries. Short generations succeeded with GPT-4o Mini, GPT-5.4 nano, and GPT-6 Luna; a two-question live list retained the chosen GPT-4o Mini/GPT-6 Luna pair through both comparisons, voting, and reload. Browser checks covered desktop, 390px and 320px layouts, both themes, keyboard focus, duplicate prevention, model-list failure/recovery, anonymous answers, reveal, and scores. OpenAI returned model-unavailable errors for the listed legacy GPT-3.5 models; these errors stayed explicit without fallback or paid retries. Other models were not live-tested. Temporary databases isolated all verification from existing user data. The upstream Starlette/httpx deprecation warning remains.
+Verification: 67 backend tests, 21 frontend tests, TypeScript checking, and the production build pass. The live catalog returned 72 GPT text entries. Short generations succeeded with GPT-4o Mini, GPT-5.4 nano, and GPT-6 Luna; a two-question live list retained the chosen GPT-4o Mini/GPT-6 Luna pair through both comparisons, voting, and reload. Browser checks covered desktop, 390px and 320px layouts, both themes, keyboard focus, duplicate prevention, model-list failure/recovery, anonymous answers, reveal, and scores. OpenAI returned model-unavailable errors for the listed legacy GPT-3.5 models; these errors stayed explicit without fallback or paid retries. Other models were not live-tested. Temporary databases isolated all verification from existing user data. The upstream Starlette/httpx deprecation warning remains.
 
 ## Public repository preparation
 
@@ -75,3 +75,24 @@ Queue verification: eight focused scheduler tests cover five-item order, overlap
 UI verification: 17 frontend tests, 32 backend tests, TypeScript, and the production build pass. Desktop/mobile browser checks and injected network/save/delayed-read failures pass. Two live five-question runs produced 20 successful responses for an estimated $0.0024263 total. Final generation time was 13.87 seconds, with 0.06–0.37 second inter-pair gaps. Detailed evidence and pricing sources are recorded in DESIGN_NOTES.md.
 
 Integration: the tested commits were fast-forward merged into the original checkout, its frontend was rebuilt, and the temporary worktree and test servers were removed. No push was performed.
+
+
+## Motion and feedback clarity
+
+Goal: make the existing interaction preferences understandable and their effective device state truthful; improve spatial feedback while preserving reading, selection, saved decisions, and the question queue. The user approved renaming the menu, explaining each control, disabling unsupported vibration, and improving fluid motion.
+
+Reference lock: retain Margin's compact paired workspace, current type, neutral light/dark surfaces, and existing accent roles. Refero live style research returned NO_SUBSCRIPTION; use its bundled Motion & Micro-interactions and Craft Details guides. Motion communicates feedback and continuity: quick control responses, soft panel entry, a passage-to-Highlights transfer and clear vote acknowledgement. UI/UX guidance reinforces reduced-motion support and limiting simultaneous movement. No palette redesign, imagery, dependencies, decorative loops, or backend changes.
+
+- [x] Replace Interaction settings with Motion & feedback; use labelled switches, concrete descriptions, effective On/Off/Unavailable states, system-override guidance, and a safe preview that does not alter comparisons.
+- [x] Keep saved preferences compatible; derive vibration availability from touch/browser capability and respect reduced motion. Make storage failures explicit and keep physical vibration claims modest.
+- [x] Improve interruptible highlight transfer, panel/control transitions and vote feedback; cancel transient effects on navigation/visibility/reduced-motion changes without changing saves, focus, selection or reading state.
+- [x] Test preference/capability combinations and existing frontend workflows; build/typecheck. Browser-check motion on/off, preview, highlights/votes, keyboard, both themes, narrow screens and reduced motion in an isolated offline session.
+- [x] Commit tested changes, integrate cleanly with concurrent work, rebuild the local app, and record verification and physical-device limits. Attempt managed-worktree cleanup without bypassing protection.
+
+
+Verification: 19 frontend tests pass, including all 32 combinations of motion/vibration preferences, system reduced-motion, touch input and vibration API availability, plus legacy/malformed preference restoration. TypeScript and production build pass. The existing queue, source-offset and scorecard tests remain green.
+
+Browser checks in an isolated offline session verified desktop and 390px/320px layouts in light/dark, accessible switch labels and Space/Escape behavior, focus restoration, preview replay and single-flight cleanup, motion-off updates, saved preference reload, actual highlight/note saving, voting/reveal/revision and retained reasoning. Local-only capability fixtures verified system overrides, a rejected vibration request, and blocked storage guidance; they are not shipped. No browser errors were observed. No paid model calls or existing comparison data were used. Physical-device vibration and mobile selection handles remain unverified.
+
+
+Integration: plan and implementation were fast-forwarded cleanly into the main checkout, and its production frontend was rebuilt. The live app was checked with Motion & feedback open and its preview working; existing comparisons were not changed. Temporary test server and browser tab were closed, the viewport was reset, and capability fixtures were removed by the production build. Managed cleanup was attempted but the app protected its primary checkout, so the clean merged worktree remains. No push or deployment was performed. Backend code was unchanged; this step reran frontend checks and the browser workflow rather than the backend suite.

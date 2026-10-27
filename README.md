@@ -74,7 +74,7 @@ Each question is an independent comparison with the same two models selected whe
 
 The queue is kept in this tab's session storage. Keep the tab open to send remaining questions. Reloading restores the list paused and checks any known in-progress comparison; press **Resume queue** to send more. Closing the tab can lose unsent questions. A lost creation response is reconciled using the same request ID before the queue can be cleared, preventing accidental duplicate requests. Each started question makes two potentially billable model requests; pausing does not cancel an already-started pair.
 
-Draft notes save automatically. If saving fails, retry or deliberately reload the saved version before leaving. Light mode is the default; your explicit theme choice is remembered. Motion respects your reduced-motion preference.
+Draft notes save automatically. If saving fails, retry or deliberately reload the saved version before leaving. Light mode is the default; your explicit theme choice is remembered. Open **Motion & feedback** to preview highlight motion, switch animations on or off, and see whether touch vibration is available. These preferences stay in this browser; your device’s Reduce Motion setting takes precedence.
 
 ### Available models
 
