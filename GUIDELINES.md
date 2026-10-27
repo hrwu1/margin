@@ -91,9 +91,9 @@ Design reference: keep the current question-list form and its inline paste previ
 - [x] Preview selected questions, show blank-row handling and queue limits, and append only after the user chooses Add questions. Preserve existing draft text and multiline content.
 - [x] Keep file contents in the browser until imported questions are explicitly compared. Extra columns never enter the question queue.
 - [x] Test parsing, validation, import cancellation/replacement, mobile/keyboard behavior, and the complete CSV-to-comparison flow with offline models. No additional paid calls are needed.
-- [ ] Commit tested steps, merge cleanly, rebuild the local app, and remove the temporary worktree.
+- [x] Commit tested steps, merge cleanly, rebuild the local app, and remove the temporary worktree.
 
-Completion: valid CSV questions can be reviewed, edited, and compared through the existing queue; malformed imports do not change drafts or start requests. The existing 20-question and 12,000-character-per-question limits remain. CSV implementation commits stay local unless separately authorized for publication.
+Completion: valid CSV questions can be reviewed, edited, and compared through the existing queue; malformed imports do not change drafts or start requests. The existing 20-question and 12,000-character-per-question limits remain. CSV implementation commits stay local unless separately authorized for publication. The tested integration was fast-forwarded into main, the local frontend was rebuilt, and the temporary CSV worktree and offline server were removed.
 
 CSV parser verification: 11 new tests cover UTF-8/BOM, CRLF, multiline cells, escaped quotes, column/header selection, empty rows, duplicate questions, all-or-nothing limits, malformed input, and bounded file dimensions. All 28 frontend tests and the production build pass. TypeScript permits explicit .ts imports so the same parser dependencies run directly in Node tests.
 
