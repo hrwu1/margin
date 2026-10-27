@@ -24,10 +24,12 @@ Goal: remove private development information from all publishable history and ve
 
 - [x] Audit tracked files, history, ignored configuration, and internal Git references.
 - [x] Replace private development notes with this portable guide.
-- [ ] Preserve an external local recovery copy and coordinate with existing work before rewriting history.
-- [ ] Remove historical private guidelines, machine-specific wording, and internal snapshot references containing unrelated personal files.
-- [ ] Clone the cleaned history without copying local configuration, dependencies, databases, or generated files.
-- [ ] Follow the README to install locked dependencies, build, start offline mode, and exercise comparison, annotations, voting, history, scores, and restart persistence.
-- [ ] Run the test suites and a browser check, then scan the final history and clone for private data.
+- [x] Preserve an external local recovery copy and coordinate with existing work before rewriting history.
+- [x] Remove historical private guidelines, machine-specific wording, and internal snapshot references containing unrelated personal files.
+- [x] Clone the cleaned history without copying local configuration, dependencies, databases, or generated files.
+- [x] Follow the README to install locked dependencies, build, start offline mode, and exercise comparison, annotations, voting, history, scores, and restart persistence.
+- [x] Run the test suites and a browser check, then scan the final history and clone for private data.
 
 Completion requires a clean working tree, no private data in publishable references, and a reproducible credential-free setup. Existing commit attribution is preserved. Live-provider access remains dependent on the reader's own credentials and model permissions.
+
+Verification: the cleanup preserved application files and attribution across 52 commits and four branches. Private historical notes and internal personal-file snapshots were removed. Git integrity and all-object privacy scans pass. A fresh clone installed with `npm ci` and `uv sync --locked`; 32 backend tests, eight frontend tests, TypeScript checking, and the production build pass. Browser checks verified offline generation, highlights and notes, model reveal, vote revision, notebook reopening, scores, and persistence across a real server restart. An independent session could not read the saved comparison, and private configuration/database paths returned HTTP 404. No live API key was copied or used during this verification. The existing Starlette test-client deprecation warning remains. No push or deployment was performed.

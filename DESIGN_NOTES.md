@@ -34,11 +34,11 @@ Changing a vote remains possible after reveal, but is labelled accordingly. High
 
 ## Verification
 
-The submission copy was checked from a clean export, without the local API key or database:
+A clean Git clone was checked by following the README, without copying an API key, database, dependencies, or generated build:
 
-- Locked dependency installation, **32 backend tests**, **3 frontend tests**, TypeScript checking, and the production build.
+- Locked dependency installation, **32 backend tests**, **8 frontend tests**, TypeScript checking, and the production build.
 - Backend coverage includes provider contracts/errors, parallel generation and partial failure, creation idempotency, session isolation, schema migration, exact/Unicode highlights, stale writes, frozen annotations, revised scores, and restart recovery.
-- Frontend tests check source formatting and highlight ranges, including overlapping marks. A separate HTTP smoke check exercises session creation, generation, annotations, vote/revision, history, scores, and reopening after a server restart.
+- Frontend tests check source formatting, highlight ranges, and score calculations, including overlapping marks, ties, revised votes, and historical model pairs. Browser checks in the clean clone exercised offline generation, annotations, vote/revision, notebook history, scores, and reopening after a real server restart. Independent HTTP checks verified session isolation and that private configuration/database files are not served.
 
 During implementation, browser checks separately exercised real responses from both exact model IDs, reveal, text/code highlights, notes, save failure/retry, vote revisions, reloads, and persistence after restart. Desktop and 390px/320px phone layouts were checked in both themes, including focus handling and reduced-motion support. These browser/live checks are manual evidence, not an automated end-to-end suite. Physical-device vibration and mobile selection handles, a full assistive-technology audit, and production load behavior remain unverified. The backend suite currently emits one upstream Starlette/httpx deprecation warning.
 
