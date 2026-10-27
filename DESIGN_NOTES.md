@@ -17,12 +17,14 @@ React workspace → same-origin FastAPI → SQLite
                            ↓
                     provider interface
                      ↙           ↘
-              GPT-5.6 Luna     GPT-6 Luna
+              Selected GPT    Selected GPT
 ```
 
 **Small, explicit boundaries.** React and TypeScript own interaction state and typed API calls. FastAPI validates requests and coordinates generation. `config.py` loads settings, `providers.py` handles external calls, and `db.py` owns SQL transactions and schema migration. SQLite provides durable local storage without another service. Sessions, comparisons, responses, votes, and annotation documents have distinct responsibilities; annotation JSON keeps a small collection of highlights together.
 
-**Persist before starting work.** A comparison and its shuffled A/B slots are saved before two concurrent provider calls begin. Each completed answer is persisted independently, so a slow or failed peer does not erase a usable result. Both models receive the same prompt and generation settings. Polling exposes completed answers without the extra partial-text and reconnect contracts of token streaming. Only two successful responses permit a vote.
+**Persist before starting work.** A comparison and its shuffled A/B slots are saved before two concurrent provider calls begin. Each completed answer is persisted independently, so a slow or failed peer does not erase a usable result. Both models receive the same prompt, with endpoint-compatible generation parameters. Polling exposes completed answers without the extra partial-text and reconnect contracts of token streaming. Only two successful responses permit a vote.
+
+**Discover before selecting.** The backend caches the OpenAI model list for five minutes and filters it to GPT text families. Users select two distinct IDs; the API checks membership and the database binds both IDs to the request ID. Catalog failures block new generation but do not block saved history or scores. A model-list entry is not proof that a generation request will succeed; provider errors remain explicit, and paid calls never retry automatically.
 
 Creation uses a session-scoped request ID to avoid duplicate generation when the same creation request is repeated. Timeouts, output limits, one pending comparison per session, and a global concurrency cap bound work. Errors have safe user-facing messages; paid calls are not automatically retried. On restart, unfinished responses become explicitly interrupted while completed data survives. This is recovery of saved state, not resumption of a job.
 

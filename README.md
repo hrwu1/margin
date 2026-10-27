@@ -2,7 +2,7 @@
 
 Compare two AI answers, keep the details that matter, and remember why you chose one.
 
-Margin sends the same prompt to **GPT-5.6 Luna** and **GPT-6 Luna**, presents their answers anonymously, and reveals the models after you vote. Your comparisons, highlights, notes, and latest votes stay in a personal notebook and scorecard.
+Margin lets you choose **two OpenAI GPT text-generation models**, sends them the same prompt, presents their answers in randomized A/B order, and reveals which model wrote each answer after you vote. Your comparisons, highlights, notes, and latest votes stay in a personal notebook and scorecard.
 
 Built with React, TypeScript, FastAPI, and SQLite. See [Design notes](DESIGN_NOTES.md) for the approach, tradeoffs, and verification.
 
@@ -12,7 +12,7 @@ Built with React, TypeScript, FastAPI, and SQLite. See [Design notes](DESIGN_NOT
 
 - Python **3.12 or newer** and [uv](https://docs.astral.sh/uv/getting-started/installation/).
 - Node.js **24 or newer**, with npm.
-- For live answers: an OpenAI API key with API credits and access to both configured models. Offline mode needs no key.
+- For live answers: an OpenAI API key with API credits, permission to list models, and access to the two selected models. Offline mode needs no key.
 
 Clone or download this repository, then open a terminal in its root, the folder containing `backend/` and `frontend/`. The commands below use a macOS/Linux shell. No database server, existing database, or local configuration is needed.
 
@@ -60,7 +60,7 @@ The key stays on the backend. `.env` is ignored by Git; never put the key in fro
 
 ## Using Margin
 
-1. **Ask once.** Enter a prompt and start a comparison. The two requests run concurrently; an answer appears when it finishes.
+1. **Choose two models and ask once.** Pick two distinct entries from the model lists, enter a prompt, and start a comparison. The same model cannot occupy both selections. The two requests run concurrently; an answer appears when it finishes. Selection order does not determine answer A or B.
 2. **Read A and B.** Compare side by side on desktop, or switch answer tabs on a narrow screen. Model names stay hidden until you vote.
 3. **Keep useful details, optionally.** Select text or use a paragraph's Highlight control. Keep several passages from either answer and add a note to each. An overall reason and decision note are separate from individual highlights. Highlights record what influenced your choice; they are not citations or an automated fact check.
 4. **Vote A, B, or tie.** Voting reveals the models and freezes your highlights and reasoning as a snapshot. You can vote without adding any notes. Both answers must finish successfully before voting is available.
@@ -68,11 +68,19 @@ The key stays on the backend. `.env` is ignored by Git; never put the key in fro
 
 Draft notes save automatically. If saving fails, retry or deliberately reload the saved version before leaving. Light mode is the default; your explicit theme choice is remembered. Motion respects your reduced-motion preference.
 
+### Available models
+
+The backend reads the [OpenAI model-list API](https://developers.openai.com/api/reference/resources/models/methods/list) using its own key. Both selectors show the returned numbered GPT text-generation families, including dated snapshots, coding models, search models, and older text models. Image, audio, realtime, transcription, speech synthesis, embeddings, non-GPT models, and custom fine-tunes are excluded. See the [official model catalog](https://developers.openai.com/api/docs/models/all) for model capabilities and lifecycle status.
+
+The list is cached for five minutes per backend process. **Reload model list** checks it again; **Retry model list** retries a failed lookup without generating answers. Comparisons stay disabled while loading, on a lookup failure, or when fewer than two models are available. Saved comparisons and scores remain accessible. Offline mode lists only its two local fixtures and never calls OpenAI.
+
+GPT-5.6 Luna and GPT-6 Luna remain the initial pair when available; otherwise the first available entries are selected. You can change either selection before every comparison. The choices remain while navigating within the open app. Models can differ substantially in cost and latency; search models may also incur search fees. A listed model can still reject generation because of retirement, permissions, quota, or other provider restrictions. Such failures are displayed without switching models or retrying paid calls.
+
 ### History and privacy
 
 History belongs to an anonymous browser session, identified by an HTTP-only cookie. Use the same browser profile and address to return later: `localhost` and `127.0.0.1` have separate cookies. Clearing cookies or using private browsing can lose access to saved history. There is no account recovery or device sync.
 
-Prompts, answers, highlights, and votes are stored in the local SQLite database. In live mode, prompts are also sent to OpenAI. Highlight notes and decision notes are not sent with generation requests. The provider requests `store=false`; that flag is not a guarantee of zero provider-side retention.
+Prompts, answers, highlights, and votes are stored in the local SQLite database. In live mode, prompts are also sent to OpenAI. Highlight notes and decision notes are not sent with generation requests. The provider requests `store=false` on Responses and Chat Completions; legacy Completions does not accept that setting. The flag is not a guarantee of zero provider-side retention.
 
 ## Configuration
 
@@ -87,7 +95,9 @@ The backend reads `.env` from the project root. Restart it after changing settin
 | `MARGIN_MAX_ACTIVE` | `4` | Concurrent comparisons across all sessions; 1–16. Each session can have one pending comparison. |
 | `MARGIN_COOKIE_SECURE` | `false` | Set `true` when serving over HTTPS; leave `false` for local HTTP. |
 
-The database directory and schema are created automatically. The configured model IDs are `gpt-5.6-luna` and `gpt-6-luna` in [providers.py](backend/app/providers.py). Both receive the same prompt, low reasoning effort, and a 4,096 output-token cap. A refused, truncated, failed, or timed-out answer cannot be voted on.
+The database directory and schema are created automatically. [providers.py](backend/app/providers.py) discovers models and routes requests to Responses, Chat Completions for older GPT/chat-search models, or legacy Completions for GPT-3.5 Turbo Instruct. Both selected models receive the same prompt. Output is capped at 4,096 tokens (1,024 for legacy Instruct); the original Luna pair uses low reasoning effort, while other models use their own defaults to avoid unsupported settings. A refused, truncated, failed, or timed-out answer cannot be voted on. Large reasoning models may need more time or output budget than this local app allows.
+
+The saved comparison retains its exact selected model IDs. Reusing a request ID with a different prompt or model pair returns a conflict; retrying the same pair in either selection order returns the existing comparison. The scorecard includes models with saved votes, including models that later disappear from the available list.
 
 **Run one backend process, with one worker.** Generation runs in that process. Restarting preserves completed data and marks unfinished responses as interrupted; it does not resume their model requests.
 
@@ -109,7 +119,7 @@ npm test --prefix frontend
 npm run build --prefix frontend
 ```
 
-The build includes TypeScript checking. Automated tests use fixtures and do not spend API credits. API schemas are available at [local API docs](http://127.0.0.1:8767/docs), and [health status](http://127.0.0.1:8767/api/health) reports the selected provider. Health status alone does not verify API credentials or model access.
+The build includes TypeScript checking. Automated tests use fixtures and do not spend API credits. They cover catalog filtering/caching, endpoint compatibility, invalid selections, selected-pair persistence, request-ID conflicts, anonymous responses, and history/score preservation. API schemas are available at [local API docs](http://127.0.0.1:8767/docs); `GET /api/models` returns the session's available model IDs and initial pair, and comparison creation requires a `models` array containing two distinct IDs. [Health status](http://127.0.0.1:8767/api/health) reports the selected provider. Health status alone does not verify API credentials or model access.
 
 ```text
 backend/app/       Configuration, providers, API, and SQLite persistence
@@ -123,7 +133,8 @@ DESIGN_NOTES.md    Engineering decisions and verification
 
 - **The page is missing or out of date:** run `npm run build --prefix frontend` from the project root, then restart the backend.
 - **Port 8767 is already in use:** replace `--port 8767` with an available port, such as `--port 8877`, in both server commands, and open `http://127.0.0.1:8877/`. Use the same address after restarts to keep the browser session. Frontend development uses the proxy configured in `frontend/vite.config.ts`; update its target too if you change the backend port.
-- **Live generation fails:** check the visible error, API key, API credits, model access, and network connection. The exact configured model IDs must be available to your API project. Offline mode remains available for testing the app.
+- **The model list does not load:** check the backend's network connection and key's model-list permission, then select Retry model list. No paid generation is started by this action.
+- **Live generation fails:** check the visible error, API key, API credits, model access, and network connection. Choose another model if a listed ID is retired or unavailable for generation. Offline mode remains available for testing the app.
 - **An answer is interrupted or times out:** the existing comparison retains whatever completed. Start a new comparison to retry; this makes new model requests.
 - **A save conflicts with another tab:** the app rejects the stale update. Preserve any text you need before reloading the saved version.
 - **History seems empty:** return to the same browser profile, hostname, and database. Copying the database alone does not restore a lost session cookie.
