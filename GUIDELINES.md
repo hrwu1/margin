@@ -67,12 +67,14 @@ The preceding question-list implementation was audited and pushed to GitHub main
 Design reference: keep the current question-list form and its inline paste preview. Adapt bundled Refero guidance for explicit file/column labels, keyboard focus, inline errors, and preserving drafts. Reuse existing neutral surfaces and button roles; no new visual system or dependencies.
 
 - [x] Parse UTF-8 comma-separated CSV locally, including BOM, CRLF, quoted commas, escaped quotes, and multiline cells. Reject malformed or oversized files clearly.
-- [ ] Detect question/prompt headers; support headerless single-column files and explicit column/header selection for other layouts.
-- [ ] Preview selected questions, show blank-row handling and queue limits, and append only after the user chooses Add questions. Preserve existing draft text and multiline content.
-- [ ] Keep file contents in the browser until imported questions are explicitly compared. Extra columns never enter the question queue.
-- [ ] Test parsing, validation, import cancellation/replacement, mobile/keyboard behavior, and the complete CSV-to-comparison flow with offline models. No additional paid calls are needed.
+- [x] Detect question/prompt headers; support headerless single-column files and explicit column/header selection for other layouts.
+- [x] Preview selected questions, show blank-row handling and queue limits, and append only after the user chooses Add questions. Preserve existing draft text and multiline content.
+- [x] Keep file contents in the browser until imported questions are explicitly compared. Extra columns never enter the question queue.
+- [x] Test parsing, validation, import cancellation/replacement, mobile/keyboard behavior, and the complete CSV-to-comparison flow with offline models. No additional paid calls are needed.
 - [ ] Commit tested steps, merge cleanly, rebuild the local app, and remove the temporary worktree.
 
 Completion: valid CSV questions can be reviewed, edited, and compared through the existing queue; malformed imports do not change drafts or start requests. The existing 20-question and 12,000-character-per-question limits remain. CSV implementation commits stay local unless separately authorized for publication.
 
 CSV parser verification: 11 new tests cover UTF-8/BOM, CRLF, multiline cells, escaped quotes, column/header selection, empty rows, duplicate questions, all-or-nothing limits, malformed input, and bounded file dimensions. All 28 frontend tests and the production build pass. TypeScript permits explicit .ts imports so the same parser dependencies run directly in Node tests.
+
+CSV UI verification: 28 frontend tests, 32 backend tests, TypeScript, and the build pass. Browser tests cover native file selection, auto/manual column mapping, headerless imports, preserving draft text, five queued comparisons, quoted multiline code, Unicode, no metadata in requests, preview gating, cancellation, invalid files, late file reads, same-file reselection, mobile light/dark layouts, and reduced motion. No additional paid requests were made. Concurrent model-selection and motion changes will be integrated and rechecked before delivery.

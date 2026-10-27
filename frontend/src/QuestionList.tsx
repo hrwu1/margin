@@ -1,13 +1,29 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MAX_QUESTIONS, splitQuestions } from './questionQueue';
 import type { QueueState } from './questionQueue';
 import { Icon } from './ui';
+import { CSVQuestionImport } from './CSVQuestionImport';
 
-export function QuestionList({ prompts, onChange, disabled }: { prompts: string[]; onChange: (values: string[]) => void; disabled: boolean }) {
+export function QuestionList({ prompts, onChange, disabled, onImportPending }: { prompts: string[]; onChange: (values: string[]) => void; disabled: boolean; onImportPending: (pending: boolean) => void }) {
   const [paste, setPaste] = useState<string | null>(null);
+  const [csv, setCSV] = useState<File | null>(null);
+  const [importNotice, setImportNotice] = useState('');
+  const fileInput = useRef<HTMLInputElement>(null);
+  const uploadButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => { onImportPending(csv !== null); return () => onImportPending(false); }, [csv, onImportPending]);
   const imported = splitQuestions(paste || '');
   return <div className="question-list-editor">
-    <div className="question-list-heading"><span>{prompts.length} / {MAX_QUESTIONS} questions</span><button type="button" className="quiet-button" disabled={disabled} onClick={() => setPaste(paste === null ? '' : null)}>{paste === null ? 'Paste a list' : 'Cancel paste'}</button></div>
+    <div className="question-list-heading"><span>{prompts.length} / {MAX_QUESTIONS} questions</span><div className="question-list-actions">
+      <button type="button" className="quiet-button" disabled={disabled} onClick={() => { setCSV(null); setImportNotice(''); setPaste(paste === null ? '' : null); }}>{paste === null ? 'Paste a list' : 'Cancel paste'}</button>
+      <button type="button" className="quiet-button" ref={uploadButton} disabled={disabled} onClick={() => fileInput.current?.click()}>Upload CSV</button>
+      <input ref={fileInput} className="sr-only" type="file" accept=".csv,text/csv" aria-label="CSV file" tabIndex={-1} disabled={disabled} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) { setCSV(file); setPaste(null); setImportNotice(''); } }}/>
+    </div></div>
+    {csv && <CSVQuestionImport file={csv} existingCount={prompts.filter(prompt => prompt.trim()).length} disabled={disabled} onCancel={() => { setCSV(null); uploadButton.current?.focus(); }} onImport={questions => {
+      const existing = prompts.filter(prompt => prompt.trim());
+      onChange([...existing, ...questions]); setCSV(null); setImportNotice(`Added ${questions.length} ${questions.length === 1 ? 'question' : 'questions'} from CSV. Review or edit them below, then start your comparison.`);
+      requestAnimationFrame(() => document.getElementById(existing.length ? `prompt-${existing.length}` : 'prompt')?.focus());
+    }}/>}
+    {importNotice && <p className="csv-notice" role="status">{importNotice}</p>}
     {paste !== null && <div className="question-import"><label htmlFor="question-import">One question per line</label><textarea id="question-import" value={paste} onChange={event => setPaste(event.target.value)} placeholder={'Why is the sky blue?\nHow does a database index work?'} disabled={disabled}/><p>Use individual question fields below for code or prompts with multiple lines.</p><button type="button" className="quiet-button" disabled={disabled || !imported.length || imported.length + prompts.filter(prompt => prompt.trim()).length > MAX_QUESTIONS || imported.some(prompt => prompt.length > 12000)} onClick={() => { onChange([...prompts.filter(prompt => prompt.trim()), ...imported]); setPaste(null); }}>Add {imported.length || ''} questions</button>{imported.length + prompts.filter(prompt => prompt.trim()).length > MAX_QUESTIONS && <p role="alert">Keep the list within {MAX_QUESTIONS} questions.</p>}{imported.some(prompt => prompt.length > 12000) && <p role="alert">Keep each question within 12,000 characters.</p>}</div>}
     {prompts.map((prompt, index) => <div className="question-field" key={index}><div><label htmlFor={index ? `prompt-${index}` : 'prompt'}>Question {index + 1}</label>{prompts.length > 1 && <button type="button" className="quiet-button" disabled={disabled} aria-label={`Remove question ${index + 1}`} onClick={() => { onChange(prompts.filter((_, i) => i !== index)); requestAnimationFrame(() => document.getElementById(index > 1 ? `prompt-${index - 1}` : 'prompt')?.focus()); }}>Remove</button>}</div><textarea id={index ? `prompt-${index}` : 'prompt'} value={prompt} maxLength={12000} required disabled={disabled} placeholder="Ask a question, paste code, or give the models a task…" onChange={event => onChange(prompts.map((value, i) => i === index ? event.target.value : value))}/></div>)}
     <button type="button" className="quiet-button add-question" disabled={disabled || prompts.length >= MAX_QUESTIONS} onClick={() => { onChange([...prompts, '']); requestAnimationFrame(() => document.getElementById(`prompt-${prompts.length}`)?.focus()); }}>+ Add question</button>

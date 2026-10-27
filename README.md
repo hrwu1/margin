@@ -74,6 +74,22 @@ Each question is an independent comparison with the same two models. Both models
 
 The queue is kept in this tab's session storage. Keep the tab open to send remaining questions. Reloading restores the list paused and checks any known in-progress comparison; press **Resume queue** to send more. Closing the tab can lose unsent questions. A lost creation response is reconciled using the same request ID before the queue can be cleared, preventing accidental duplicate requests. Each started question makes two potentially billable model requests; pausing does not cancel an already-started pair.
 
+### Importing questions from CSV
+
+In **Question list**, choose **Upload CSV**. Margin detects a `question`, `questions`, `prompt`, or `prompts` header. Headerless single-column files also work. For other layouts, select the question column and set **First row is a header** as needed; the preview shows exactly which text will be imported.
+
+```csv
+question
+"When should a small application use SQLite?"
+"Explain the tradeoff between speed, cost, and accuracy."
+```
+
+Choose **Add questions** to append them to your draft, edit if needed, then select **Compare**. Existing draft questions are preserved. Empty question cells are skipped and counted; duplicates are kept. Quoted commas, doubled quotes, multiline code, UTF-8 text, and UTF-8 BOM are supported. Export Excel or other spreadsheets as **CSV (UTF-8)** with commas as separators.
+
+Files are limited to 1 MB, 100 columns, and 10,000 nonempty rows. Your final list must still fit within 20 questions, each at most 12,000 characters. Invalid files and oversized lists show an error without partially importing or starting comparisons.
+
+The file is parsed locally in your browser. Its filename and other columns are not uploaded. Only the selected question text enters the existing comparison workflow after you add it and explicitly start comparing.
+
 Draft notes save automatically. If saving fails, retry or deliberately reload the saved version before leaving. Light mode is the default; your explicit theme choice is remembered. Motion respects your reduced-motion preference.
 
 ### History and privacy

@@ -21,6 +21,7 @@ export function App() {
   const [comparison, setComparison] = useState<Comparison | null>(null);
   const [prompts, setPrompts] = useState(['']);
   const [listMode, setListMode] = useState(false);
+  const [importPending, setImportPending] = useState(false);
   const prompt = prompts[0];
   const setPrompt = (value: string) => setPrompts(previous => [value, ...previous.slice(1)]);
   const [submitting, setSubmitting] = useState(false);
@@ -114,7 +115,7 @@ export function App() {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     const text = prompt.trim();
-    if (!text || submitting || !session || queue.unfinished) return;
+    if (!text || submitting || !session || queue.unfinished || importPending) return;
     if (listMode) {
       setSubmitting(true); setError('');
       try {
@@ -173,9 +174,9 @@ export function App() {
           <div className="composer-intro"><span className="eyebrow">A comparison worth keeping</span><h1>{listMode ? 'Your list. Two perspectives.' : <>One prompt.<br/>Two perspectives.</>}</h1><p>{listMode ? 'Add your questions once. Read and compare at your own pace.' : <>Read without a label. Highlight what matters.<br/>Decide which answer works better for you.</>}</p></div>
           <div className="composer-mode" role="group" aria-label="Prompt entry mode"><button aria-pressed={!listMode} disabled={submitting} onClick={() => setListMode(false)}>Single prompt</button><button aria-pressed={listMode} disabled={submitting} onClick={() => setListMode(true)}>Question list</button></div>
           <form className="prompt-composer" onSubmit={submit} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); event.currentTarget.requestSubmit(); } }}>
-            {listMode ? <QuestionList prompts={prompts} onChange={setPrompts} disabled={submitting}/> : <><label htmlFor="prompt">What would you like to compare?</label><textarea id="prompt" value={prompt} maxLength={session?.max_prompt_length || 12000} onChange={event => setPrompt(event.target.value)} placeholder="Ask a question, paste some code, or give the models a task…" required disabled={submitting}/></>}
+            {listMode ? <QuestionList prompts={prompts} onChange={setPrompts} disabled={submitting} onImportPending={setImportPending}/> : <><label htmlFor="prompt">What would you like to compare?</label><textarea id="prompt" value={prompt} maxLength={session?.max_prompt_length || 12000} onChange={event => setPrompt(event.target.value)} placeholder="Ask a question, paste some code, or give the models a task…" required disabled={submitting}/></>}
             {listMode && <p className="queue-explainer">Both models answer each question together. The next pair starts as soon as this pair finishes, while you read or vote. Pause anytime.</p>}
-            <div className="composer-actions"><span>{listMode ? `${prompts.length} questions · ${prompts.length * 2} model calls` : `${prompt.length.toLocaleString()} / 12,000`} <kbd>⌘ / Ctrl ↵</kbd></span><button className="primary" disabled={!session || submitting || queue.unfinished || (listMode ? prompts.some(value => !value.trim()) : !prompt.trim())}>{submitting ? 'Starting…' : listMode ? `Compare ${prompts.length} ${prompts.length === 1 ? 'question' : 'questions'}` : 'Compare answers'} <Icon name="arrow"/></button></div>
+            <div className="composer-actions"><span>{listMode ? `${prompts.length} questions · ${prompts.length * 2} model calls` : `${prompt.length.toLocaleString()} / 12,000`} <kbd>⌘ / Ctrl ↵</kbd></span><button className="primary" disabled={!session || submitting || queue.unfinished || importPending || (listMode ? prompts.some(value => !value.trim()) : !prompt.trim())}>{submitting ? 'Starting…' : listMode ? `Compare ${prompts.length} ${prompts.length === 1 ? 'question' : 'questions'}` : 'Compare answers'} <Icon name="arrow"/></button></div>
             {queue.unfinished && <p className="queue-explainer">A question list is in progress. Finish it, or pause and discard its unsent questions, before starting another comparison.</p>}
           </form>
           <div className="prompt-starters"><span>Try a starting point</span>{starters.map(item => <button className="quiet-button" key={item.title} disabled={submitting} onClick={() => { setPrompt(item.prompt); document.getElementById('prompt')?.focus(); }}>{item.title} <Icon name="arrow"/></button>)}</div>
