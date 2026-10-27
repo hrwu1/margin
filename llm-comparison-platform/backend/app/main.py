@@ -54,6 +54,31 @@ class Vote(BaseModel):
     choice: Literal['A', 'B', 'tie']
     reason: Literal['Clarity', 'Depth', 'Practicality', 'Follows the prompt'] | None = None
     evidence: Evidence | None = None
+    annotation_revision: int | None = Field(default=None, ge=0, strict=True)
+
+
+class Highlight(Evidence):
+    start: int = Field(ge=0, strict=True)
+    end: int = Field(ge=1, strict=True)
+    quote: str = Field(min_length=1, max_length=60000)
+    note: str = Field(default='', max_length=1000)
+
+
+class Annotations(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    highlights: list[Highlight] = Field(default_factory=list, max_length=50)
+    reason: Literal['Correctness', 'Clarity', 'Useful detail', 'Follows the prompt', 'Depth', 'Practicality'] | None = None
+    note: str = Field(default='', max_length=2000)
+
+
+class SaveAnnotations(Annotations):
+    revision: int = Field(ge=0, strict=True)
+
+
+class ReviseVote(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    choice: Literal['A', 'B', 'tie']
+    revision: int = Field(ge=0, strict=True)
 
 
 def public_comparison(record):
@@ -70,9 +95,10 @@ def public_comparison(record):
         if vote['evidence_side']:
             answer = next(answer for answer in responses if answer['side'] == vote['evidence_side'])
             evidence = {'side': vote['evidence_side'], 'paragraph_index': vote['evidence_index'], 'quote': answer['paragraphs'][vote['evidence_index']]}
-        public_vote = {'choice': vote['choice'], 'reason': vote['reason'], 'evidence': evidence, 'created_at': vote['created_at']}
+        public_vote = {'choice': vote['choice'], 'reason': vote['reason'], 'evidence': evidence, 'created_at': vote['created_at'], 'edited': bool(vote['edited']), 'revision': vote['revision'], 'updated_at': vote['updated_at']}
     return {'id': record['id'], 'prompt': record['prompt'], 'status': record['status'],
-            'created_at': record['created_at'], 'responses': responses, 'vote': public_vote}
+            'created_at': record['created_at'], 'responses': responses, 'vote': public_vote,
+            'annotations': record['annotations'], 'annotation_revision': record['annotation_revision']}
 
 
 def create_app(settings: Settings | None = None, provider: Provider | None = None) -> FastAPI:
@@ -197,7 +223,17 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
 
     @app.post('/api/comparisons/{comparison_id}/vote')
     async def vote(comparison_id: UUID, body: Vote, owner: Annotated[str, Depends(session)]):
-        record = await asyncio.to_thread(db.vote, owner, str(comparison_id), body.choice, body.reason, body.evidence.model_dump() if body.evidence else None)
+        record = await asyncio.to_thread(db.vote, owner, str(comparison_id), body.choice, body.reason, body.evidence.model_dump() if body.evidence else None, body.annotation_revision)
+        return public_comparison(record)
+
+    @app.put('/api/comparisons/{comparison_id}/annotations')
+    async def save_annotations(comparison_id: UUID, body: SaveAnnotations, owner: Annotated[str, Depends(session)]):
+        record = await asyncio.to_thread(db.save_annotations, owner, str(comparison_id), body.revision, body.model_dump(exclude={'revision'}))
+        return public_comparison(record)
+
+    @app.patch('/api/comparisons/{comparison_id}/vote')
+    async def revise_vote(comparison_id: UUID, body: ReviseVote, owner: Annotated[str, Depends(session)]):
+        record = await asyncio.to_thread(db.revise_vote, owner, str(comparison_id), body.choice, body.revision)
         return public_comparison(record)
 
     @app.get('/api/scores')

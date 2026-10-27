@@ -114,3 +114,85 @@ def test_vote_survives_reopen_and_schema_is_repeatable(db):
     reopened.recover_interrupted()
     assert reopened.get_comparison('alice', identifier)['vote']['choice'] == 'tie'
     assert reopened.scores('alice', ('cedar', 'birch'))[0]['ties'] == 1
+
+
+def annotation(quote='Second', start=0, end=6):
+    return {'highlights': [{'side': 'A', 'paragraph_index': 1, 'start': start, 'end': end, 'quote': quote, 'note': 'Why this matters'}],
+            'reason': 'Correctness', 'note': 'My overall reasoning'}
+
+
+def test_highlights_validate_source_freeze_and_survive_revision(db):
+    identifier = ready(db)
+    for document in (annotation('forged'), annotation(start=True), annotation(end=999)):
+        with pytest.raises(InvalidVote):
+            db.save_annotations('alice', identifier, 0, document)
+    duplicate = annotation()
+    duplicate['highlights'] *= 2
+    with pytest.raises(InvalidVote):
+        db.save_annotations('alice', identifier, 0, duplicate)
+    saved = db.save_annotations('alice', identifier, 0, annotation())
+    assert saved['annotation_revision'] == 1
+    with pytest.raises(Conflict):
+        db.save_annotations('alice', identifier, 0, annotation())
+    with pytest.raises(NotFound):
+        db.save_annotations('bob', identifier, 1, annotation())
+    with pytest.raises(Conflict):
+        db.vote('alice', identifier, 'A', None, None, 0)
+    voted = db.vote('alice', identifier, 'A', None, None, 1)
+    assert not voted['vote']['edited']
+    assert db.revise_vote('alice', identifier, 'A', 0)['vote'] == voted['vote']
+    for revision, choice in enumerate(('B', 'tie', 'A')):
+        changed = db.revise_vote('alice', identifier, choice, revision)
+        assert changed['annotations'] == annotation()
+        assert changed['vote']['edited'] and changed['vote']['revision'] == revision + 1
+        scores = db.scores('alice', ('cedar', 'birch'))
+        assert all(row['compared'] == 1 for row in scores)
+        assert sum(row['ties'] for row in scores) == (2 if choice == 'tie' else 0)
+    with pytest.raises(Conflict):
+        db.save_annotations('alice', identifier, 1, annotation())
+    with pytest.raises(Conflict):
+        db.revise_vote('alice', identifier, 'B', 0)
+    reopened = Database(db.path)
+    reopened.initialize()
+    assert reopened.get_comparison('alice', identifier)['annotations'] == annotation()
+    assert reopened.get_comparison('alice', identifier)['vote'] == changed['vote']
+
+
+def test_concurrent_revisions_reject_lost_updates(db):
+    identifier = ready(db)
+    db.vote('alice', identifier, 'A', None, None)
+    def revise(choice):
+        try:
+            return db.revise_vote('alice', identifier, choice, 0)['vote']['choice']
+        except Conflict:
+            return 'conflict'
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(revise, ['B', 'tie']))
+    assert results.count('conflict') == 1
+    assert all(row['compared'] == 1 for row in db.scores('alice', ('cedar', 'birch')))
+
+
+def test_v1_migration_keeps_evidence_and_scores(db):
+    identifier = ready(db)
+    db.vote('alice', identifier, 'B', 'Clarity', {'side': 'A', 'paragraph_index': 1})
+    # Reconstruct v1's exact columns while retaining a real persisted comparison/vote.
+    with db.connect() as connection:
+        connection.execute('DROP TABLE annotations')
+        for column in ('edited', 'revision', 'updated_at'):
+            connection.execute(f'ALTER TABLE votes DROP COLUMN {column}')
+        connection.execute('PRAGMA user_version = 1')
+    db.initialize()
+    db.initialize()
+    restored = db.get_comparison('alice', identifier)
+    assert restored['vote']['choice'] == 'B' and not restored['vote']['edited']
+    assert restored['annotations']['highlights'][0]['quote'] == 'Second paragraph.'
+    assert restored['annotations']['reason'] == 'Clarity'
+    assert sum(row['wins'] for row in db.scores('alice', ('cedar', 'birch'))) == 1
+
+
+def test_unicode_offsets_and_blank_code_paragraphs(db):
+    identifier = create(db)
+    db.finish_response(identifier, 'A', content='Hello 🌍!\n\n```python\nx = 1\n\nprint(x)\n```')
+    db.finish_response(identifier, 'B', content='Other answer.')
+    document = {'highlights': [{'side': 'A', 'paragraph_index': 0, 'start': 6, 'end': 7, 'quote': '🌍', 'note': ''}], 'note': '', 'reason': None}
+    assert db.save_annotations('alice', identifier, 0, document)['annotations'] == document

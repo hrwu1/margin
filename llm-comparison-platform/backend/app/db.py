@@ -2,6 +2,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
+import json
 from uuid import uuid4
 
 
@@ -56,7 +57,7 @@ class Database:
         with self.connect() as connection:
             connection.execute("PRAGMA journal_mode = WAL")
             version = connection.execute("PRAGMA user_version").fetchone()[0]
-            if version > 1:
+            if version > 2:
                 raise RuntimeError("Database schema is newer than this application.")
             if version == 0:
                 connection.executescript("""
@@ -95,6 +96,21 @@ class Database:
                         CHECK((evidence_side IS NULL) = (evidence_index IS NULL))
                     );
                     PRAGMA user_version = 1;
+                    COMMIT;
+                """)
+
+            if version < 2:
+                connection.executescript("""
+                    BEGIN IMMEDIATE;
+                    CREATE TABLE annotations (
+                        comparison_id TEXT PRIMARY KEY REFERENCES comparisons(id) ON DELETE CASCADE,
+                        revision INTEGER NOT NULL,
+                        document TEXT NOT NULL
+                    );
+                    ALTER TABLE votes ADD COLUMN edited INTEGER NOT NULL DEFAULT 0;
+                    ALTER TABLE votes ADD COLUMN revision INTEGER NOT NULL DEFAULT 0;
+                    ALTER TABLE votes ADD COLUMN updated_at TEXT;
+                    PRAGMA user_version = 2;
                     COMMIT;
                 """)
 
@@ -155,6 +171,16 @@ class Database:
         result['responses'] = [dict(row) for row in connection.execute("SELECT * FROM responses WHERE comparison_id = ? ORDER BY side", (comparison_id,))]
         vote = connection.execute("SELECT * FROM votes WHERE comparison_id = ?", (comparison_id,)).fetchone()
         result['vote'] = dict(vote) if vote else None
+        annotations = connection.execute('SELECT revision, document FROM annotations WHERE comparison_id = ?', (comparison_id,)).fetchone()
+        result['annotation_revision'] = annotations['revision'] if annotations else 0
+        result['annotations'] = json.loads(annotations['document']) if annotations else {'highlights': [], 'reason': None, 'note': ''}
+        if not annotations and vote:
+            result['annotations']['reason'] = vote['reason']
+            if vote['evidence_side']:
+                answer = next(answer for answer in result['responses'] if answer['side'] == vote['evidence_side'])
+                text = paragraphs(answer['content'])[vote['evidence_index']]
+                result['annotations']['highlights'] = [{'side': vote['evidence_side'], 'paragraph_index': vote['evidence_index'],
+                                                        'start': 0, 'end': len(text), 'quote': text, 'note': ''}]
         return result
 
     def get_comparison(self, session: str, comparison_id: str):
@@ -163,13 +189,15 @@ class Database:
             connection.execute("BEGIN")
             return self._get(connection, session, comparison_id)
 
-    def vote(self, session: str, comparison_id: str, choice: str, reason: str | None, evidence: dict | None):
+    def vote(self, session: str, comparison_id: str, choice: str, reason: str | None, evidence: dict | None, annotation_revision: int | None = None):
         if choice not in ('A', 'B', 'tie') or reason not in (None, 'Clarity', 'Depth', 'Practicality', 'Follows the prompt'):
             raise InvalidVote("Invalid vote or reason.")
         side = evidence['side'] if evidence else None
         index = evidence['paragraph_index'] if evidence else None
         with self.connect(write=True) as connection:
             comparison = self._get(connection, session, comparison_id)
+            if annotation_revision is not None and annotation_revision != comparison['annotation_revision']:
+                raise Conflict('Your highlights changed in another tab. Reload before voting.')
             if comparison['status'] != 'ready':
                 raise Conflict("Both responses must succeed before you can vote.")
             if evidence:
@@ -181,13 +209,58 @@ class Database:
                 if (previous['choice'], previous['reason'], previous['evidence_side'], previous['evidence_index']) != (choice, reason, side, index):
                     raise Conflict("This comparison already has a vote. Revealed comparisons cannot be voted on again.")
             else:
-                connection.execute("INSERT INTO votes VALUES (?, ?, ?, ?, ?, ?)", (comparison_id, choice, reason, side, index, now()))
+                connection.execute("INSERT INTO votes(comparison_id, choice, reason, evidence_side, evidence_index, created_at) VALUES (?, ?, ?, ?, ?, ?)", (comparison_id, choice, reason, side, index, now()))
+            return self._get(connection, session, comparison_id)
+
+    def save_annotations(self, session: str, comparison_id: str, revision: int, document: dict):
+        with self.connect(write=True) as connection:
+            comparison = self._get(connection, session, comparison_id)
+            if comparison['vote']:
+                raise Conflict('Highlights and reasoning are saved with the first vote and cannot be changed after reveal.')
+            if revision != comparison['annotation_revision']:
+                raise Conflict('This comparison changed in another tab. Reload to use the latest highlights.')
+            if document.get('reason') not in (None, 'Correctness', 'Clarity', 'Useful detail', 'Follows the prompt', 'Depth', 'Practicality'):
+                raise InvalidVote('Invalid reason.')
+            if not isinstance(document.get('note'), str) or len(document['note']) > 2000 or len(document.get('highlights', [])) > 50:
+                raise InvalidVote('Keep at most 50 highlights and a note of at most 2,000 characters.')
+            seen = set()
+            for highlight in document['highlights']:
+                side, index, start, end = (highlight.get(key) for key in ('side', 'paragraph_index', 'start', 'end'))
+                answer = next((answer for answer in comparison['responses'] if answer['side'] == side and answer['status'] == 'success'), None)
+                if not answer or type(index) is not int or not 0 <= index < len(paragraphs(answer['content'])):
+                    raise InvalidVote('A highlight must refer to a completed answer in this comparison.')
+                text = paragraphs(answer['content'])[index]
+                if type(start) is not int or type(end) is not int or not 0 <= start < end <= len(text) or text[start:end] != highlight.get('quote'):
+                    raise InvalidVote('A highlight must match its exact source text.')
+                if not isinstance(highlight.get('note'), str) or len(highlight['note']) > 1000:
+                    raise InvalidVote('Keep each highlight note within 1,000 characters.')
+                identity = (side, index, start, end)
+                if identity in seen:
+                    raise InvalidVote('This excerpt is already highlighted.')
+                seen.add(identity)
+            connection.execute('INSERT INTO annotations VALUES (?, ?, ?) ON CONFLICT(comparison_id) DO UPDATE SET revision=excluded.revision, document=excluded.document',
+                               (comparison_id, revision + 1, json.dumps(document, ensure_ascii=False)))
+            return self._get(connection, session, comparison_id)
+
+    def revise_vote(self, session: str, comparison_id: str, choice: str, revision: int):
+        if choice not in ('A', 'B', 'tie'):
+            raise InvalidVote('Invalid vote.')
+        with self.connect(write=True) as connection:
+            comparison = self._get(connection, session, comparison_id)
+            previous = comparison['vote']
+            if not previous:
+                raise Conflict('Vote before revising a decision.')
+            if revision != previous['revision']:
+                raise Conflict('Your vote changed in another tab. Reload before editing it.')
+            if choice != previous['choice']:
+                connection.execute('UPDATE votes SET choice=?, edited=1, revision=revision+1, updated_at=? WHERE comparison_id=?',
+                                   (choice, now(), comparison_id))
             return self._get(connection, session, comparison_id)
 
     def history(self, session: str, limit: int, offset: int):
         with self.connect() as connection:
             rows = connection.execute("""
-                SELECT c.id, c.prompt, c.status, c.created_at, v.choice AS vote
+                SELECT c.id, c.prompt, c.status, c.created_at, v.choice AS vote, COALESCE(v.edited, 0) AS edited
                 FROM comparisons c LEFT JOIN votes v ON v.comparison_id = c.id
                 WHERE c.session_hash = ? ORDER BY c.created_at DESC, c.id DESC LIMIT ? OFFSET ?
             """, (session, limit + 1, offset)).fetchall()

@@ -167,3 +167,34 @@ def test_secure_cookie_and_unknown_provider(settings):
         assert 'Secure' in session(client).headers['set-cookie']
     with pytest.raises(ValueError, match='Use MARGIN_PROVIDER=openai or mock'):
         create_app(Settings(provider='not-configured'))
+
+
+def test_annotations_and_vote_revision_api(settings):
+    with TestClient(create_app(settings, ControlledProvider())) as client:
+        session(client)
+        identifier = settle(client, submit(client)['id'])['id']
+        base = f'/api/comparisons/{identifier}'
+        document = {'revision': 0, 'highlights': [
+            {'side': 'A', 'paragraph_index': 0, 'start': 0, 'end': 5, 'quote': 'First', 'note': 'Clear start'},
+            {'side': 'B', 'paragraph_index': 1, 'start': 2, 'end': 8, 'quote': 'useful', 'note': 'Useful detail'},
+        ], 'reason': 'Useful detail', 'note': 'Both answers offer something.'}
+        saved = client.put(f'{base}/annotations', json=document, headers=HEADERS)
+        assert saved.status_code == 200, saved.text
+        assert saved.json()['annotation_revision'] == 1
+        assert client.put(f'{base}/annotations', json=document, headers=HEADERS).status_code == 409
+        vote = client.post(f'{base}/vote', json={'choice': 'A', 'annotation_revision': 1}, headers=HEADERS)
+        assert vote.status_code == 200
+        assert all(answer['model'] for answer in vote.json()['responses'])
+        revised = client.patch(f'{base}/vote', json={'choice': 'tie', 'revision': 0}, headers=HEADERS)
+        assert revised.status_code == 200
+        assert revised.json()['vote']['edited']
+        assert revised.json()['annotations'] == saved.json()['annotations']
+        assert client.patch(f'{base}/vote', json={'choice': 'B', 'revision': 0}, headers=HEADERS).status_code == 409
+        document['revision'] = 1
+        assert client.put(f'{base}/annotations', json=document, headers=HEADERS).status_code == 409
+        assert all(row['ties'] == 1 for row in client.get('/api/scores').json()['items'])
+        assert client.get('/api/comparisons').json()['items'][0]['edited'] == 1
+        client.cookies.clear()
+        session(client)
+        assert client.patch(f'{base}/vote', json={'choice': 'A', 'revision': 1}, headers=HEADERS).status_code == 404
+        assert client.put(f'{base}/annotations', json=document, headers=HEADERS).status_code == 404
