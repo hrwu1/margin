@@ -33,3 +33,21 @@ Goal: remove private development information from all publishable history and ve
 Completion requires a clean working tree, no private data in publishable references, and a reproducible credential-free setup. Existing commit attribution is preserved. Live-provider access remains dependent on the reader's own credentials and model permissions.
 
 Verification: the cleanup preserved application files and attribution across 52 commits and four branches. Private historical notes and internal personal-file snapshots were removed. Git integrity and all-object privacy scans pass. A fresh clone installed with `npm ci` and `uv sync --locked`; 32 backend tests, eight frontend tests, TypeScript checking, and the production build pass. Browser checks verified offline generation, highlights and notes, model reveal, vote revision, notebook reopening, scores, and persistence across a real server restart. An independent session could not read the saved comparison, and private configuration/database paths returned HTTP 404. No live API key was copied or used during this verification. The existing Starlette test-client deprecation warning remains. No push or deployment was performed.
+
+## Multiple-question workflow
+
+Goal: enter a list once and compare each independent answer pair without repeatedly returning to the composer.
+
+Design: keep Margin's current typography, neutral surfaces, compact controls, and accent roles. The existing interface is the visual reference; Refero live research was unavailable. Bundled form/focus and motion guidance informs labelled fields, visible focus, stable reading position, and restrained state feedback.
+
+- [ ] Add labelled question rows and paste-list entry, preserving multiline single prompts.
+- [ ] Run one pair at a time; start the next question after both answers settle, while the user reads or votes. Never automatically navigate or reveal identities.
+- [ ] Show queued/generating/ready/failed states and pause/resume. Pause after failures; never automatically retry a paid generation.
+- [ ] Reuse request IDs across reconnects; preserve the queue in this tab's session storage, restoring paused after reload. Completed comparisons stay in the existing notebook.
+- [ ] Preserve annotation flush guards, single-prompt behavior, mobile controls, and reduced motion.
+- [ ] Verify scheduling, errors, duplicate prevention, persistence, browser interactions, and five varied questions against both configured live models for less than $2.
+- [ ] Commit tested steps, merge cleanly into the original checkout, and remove the temporary worktree.
+
+Scope: the existing API and per-session generation limit remain the source of truth. Queue orchestration lives in the browser; closing the tab stops unsent questions. No backend queue service or dependencies are needed.
+
+Completion requires passing automated checks and browser evidence, recorded real-model latency/usage, and clear limits on recovery and cost measurement.
