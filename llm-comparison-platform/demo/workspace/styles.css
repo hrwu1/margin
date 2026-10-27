@@ -65,3 +65,7 @@
 :root[data-theme=light] .mobile-picker{background:var(--raised)}
 :root[data-theme=light] .evidence-drawer{border-color:var(--control-border)}
 :root[data-theme=light] .preference button[aria-pressed=true]:hover{background:var(--secondary);color:var(--canvas)}
+
+.edited-label{display:block;margin-top:5px;color:var(--secondary)}
+.cancel-vote{min-height:28px;padding:3px 8px;align-self:start;width:fit-content}
+.vote-button[aria-pressed=true]{border-color:var(--secondary);box-shadow:inset 0 0 0 1px var(--secondary)}

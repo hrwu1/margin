@@ -2,13 +2,16 @@ import { examples, reasons, scoreDecisions } from '../directions/app.js';
 export { examples, reasons };
 export const STORAGE_KEY = 'margin-workspace-v1';
 const sides = ['A', 'B'];
-const empty = () => ({ marks: {}, quotes: {}, reason: null, note: '', vote: null });
+const empty = () => ({ marks: {}, quotes: {}, reason: null, note: '', vote: null, edited: false });
 
 export function normalizeState(value) {
   const result = { sampleId: examples.some(e => e.id === value?.sampleId) ? value.sampleId : 'python', sessions: {} };
   for (const ex of examples) {
     const source = value?.sessions?.[ex.id], session = empty();
-    if (['A', 'B', 'tie'].includes(source?.vote)) session.vote = source.vote;
+    if (['A', 'B', 'tie'].includes(source?.vote)) {
+      session.vote = source.vote;
+      session.edited = source.edited === true;
+    }
     if (reasons.includes(source?.reason)) session.reason = source.reason;
     if (typeof source?.note === 'string') session.note = source.note.slice(0, 600);
     for (const side of sides) {
@@ -34,7 +37,11 @@ export function updateSession(state, id, patch) {
 }
 export function castVote(state, id, choice) {
   const next = normalizeState(state);
-  if (next.sessions[id] && !next.sessions[id].vote && ['A', 'B', 'tie'].includes(choice)) next.sessions[id].vote = choice;
+  const session = next.sessions[id];
+  if (session && ['A', 'B', 'tie'].includes(choice)) {
+    if (session.vote && session.vote !== choice) session.edited = true;
+    session.vote = choice;
+  }
   return next;
 }
 export function decisions(state) {

@@ -1,4 +1,5 @@
-import { examples, reasons, STORAGE_KEY, normalizeState, readState, updateSession, castVote, decisions, scores } from './model.js';
+// Keep the editor paired with the revised state contract in cached static previews.
+import { examples, reasons, STORAGE_KEY, normalizeState, readState, updateSession, castVote, decisions, scores } from './model.js?v=editable-votes';
 import { createFeedback } from '../bold/feedback.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -27,7 +28,7 @@ const icon = name => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 const button = (action, label, attributes = '', className = 'icon-button') => `<button type="button" data-action="${action}" class="${className}" ${attributes}>${label}</button>`;
 const sides = ['A', 'B'];
 const storage = { getItem: key => localStorage.getItem(key), setItem: (key, value) => localStorage.setItem(key, value) };
-let state = normalizeState(null), storageError = '', drawerOpen = false, mobileSide = 'A', drawerOpener = null, selection = null, toastTimer;
+let state = normalizeState(null), storageError = '', drawerOpen = false, editingVote = false, mobileSide = 'A', drawerOpener = null, selection = null, toastTimer;
 try { state = readState(storage); } catch { storageError = 'Saved data could not be read. This visit starts with a fresh workspace.'; }
 const compact = matchMedia('(max-width: 900px)');
 const sample = () => examples.find(ex => ex.id === state.sampleId);
@@ -146,11 +147,21 @@ function renderEvidence() {
   $('.drawer-scroll').innerHTML = `<p class="drawer-intro">${current.vote ? 'The evidence behind your decision. Saved with the exact words you kept.' : 'Keep one passage from each answer, or select the exact words that matter.'}</p><div class="evidence-list">${kept.length ? kept.map(side => {
     const p = sample().answers[side].paragraphs[current.marks[side]];
     return `<article class="evidence-card" data-side="${side}"><header><span>Answer ${side} · passage ${current.marks[side] + 1}</span>${current.vote ? icon('lock') : button('remove', icon('close'), `data-side="${side}" aria-label="Remove evidence from answer ${side}"`)}</header><blockquote>${escape(current.quotes[side] || p.text)}${!current.quotes[side] && p.code ? `<pre><code>${escape(p.code)}</code></pre>` : ''}</blockquote>${button('jump', `Back to passage ${icon('arrow')}`, `data-side="${side}"`, 'show-passage')}</article>`;
-  }).join('') : `<div class="empty-evidence">${icon('quote')}<strong>Keep what changes your mind.</strong><p>Use the + beside a passage, or select a sentence. It will stay here while you compare.</p></div>`}</div><div class="reason-section"><fieldset><legend>What mattered? <span>Optional</span></legend><div class="reasons">${reasons.map(reason => button('reason', escape(reason), `data-reason="${escape(reason)}" aria-pressed="${current.reason === reason}" ${current.vote ? 'disabled' : ''}`, '')).join('')}</div></fieldset><label for="decision-note" class="note-label">Your reasoning <span>Optional</span></label><textarea id="decision-note" maxlength="600" rows="4" placeholder="What made the difference?" ${current.vote ? 'readonly' : ''}>${escape(current.note)}</textarea><p class="note-status">${current.vote ? 'Saved with your decision' : 'Saves as you write'} · ${current.note.length}/600</p></div><div class="drawer-end">${icon(current.vote ? 'lock' : 'info')}<p>${current.vote ? 'Voting locks your choice and evidence before revealing the models.' : 'Your evidence and reasoning will be saved with your vote.'}</p></div>`;
+  }).join('') : `<div class="empty-evidence">${icon('quote')}<strong>Keep what changes your mind.</strong><p>Use the + beside a passage, or select a sentence. It will stay here while you compare.</p></div>`}</div><div class="reason-section"><fieldset><legend>What mattered? <span>Optional</span></legend><div class="reasons">${reasons.map(reason => button('reason', escape(reason), `data-reason="${escape(reason)}" aria-pressed="${current.reason === reason}" ${current.vote ? 'disabled' : ''}`, '')).join('')}</div></fieldset><label for="decision-note" class="note-label">Your reasoning <span>Optional</span></label><textarea id="decision-note" maxlength="600" rows="4" placeholder="What made the difference?" ${current.vote ? 'readonly' : ''}>${escape(current.note)}</textarea><p class="note-status">${current.vote ? 'Saved with your decision' : 'Saves as you write'} · ${current.note.length}/600</p></div><div class="drawer-end">${icon(current.vote ? 'lock' : 'info')}<p>${current.vote ? 'Your saved evidence and reasoning stay attached when you change your vote.' : 'Your evidence and reasoning will be saved with your vote.'}</p></div>`;
 }
 function renderDock() {
   const current = session(), completed = decisions(state).length;
-  $('.decision-dock').innerHTML = current.vote ? `<div class="saved-decision" tabindex="-1"><span class="saved-icon">${icon('check')}</span><div><strong>${current.vote === 'tie' ? 'You called it a tie.' : `You chose ${sample().answers[current.vote].model}.`}</strong><p>${current.reason ? `${escape(current.reason)} · ` : ''}Saved in your notebook with ${Object.keys(current.marks).length} kept ${Object.keys(current.marks).length === 1 ? 'passage' : 'passages'}.</p></div></div><div class="dock-actions">${completed < examples.length ? button('notebook', 'Notebook', '', 'quiet-button') : ''}${button(completed < examples.length ? 'next' : 'notebook', `${completed < examples.length ? 'Next comparison' : 'View notebook'} ${icon('arrow')}`, '', 'primary')}</div>` : `<div class="decision-copy"><strong>Which answer would you use?</strong><span>Vote to reveal the models</span></div><div class="votes">${button('vote', '<span>A</span> Answer A', 'data-vote="A"', 'vote-button')}${button('vote', 'It’s a tie', 'data-vote="tie"', 'vote-button tie')}${button('vote', '<span>B</span> Answer B', 'data-vote="B"', 'vote-button')}</div>`;
+  if (current.vote && !editingVote) {
+    $('.decision-dock').innerHTML = `<div class="saved-decision" tabindex="-1"><span class="saved-icon">${icon('check')}</span><div><strong>${current.vote === 'tie' ? 'You called it a tie.' : `You chose ${sample().answers[current.vote].model}.`}</strong><p>${current.reason ? `${escape(current.reason)} · ` : ''}Saved in your notebook with ${Object.keys(current.marks).length} kept ${Object.keys(current.marks).length === 1 ? 'passage' : 'passages'}.${current.edited ? '<span class="edited-label">Edited after reveal</span>' : ''}</p></div></div><div class="dock-actions">${button('change-vote', 'Change vote', '', 'quiet-button')}${button(completed < examples.length ? 'next' : 'notebook', `${completed < examples.length ? 'Next comparison' : 'View notebook'} ${icon('arrow')}`, '', 'primary')}</div>`;
+    return;
+  }
+  $('.decision-dock').innerHTML = `<div class="decision-copy"><strong>${editingVote ? 'Change your vote' : 'Which answer would you use?'}</strong>${editingVote ? button('cancel-vote', 'Cancel', '', 'quiet-button cancel-vote') : '<span>Vote to reveal the models</span>'}</div><div class="votes">${['A', 'tie', 'B'].map(choice => button('vote', choice === 'tie' ? 'It’s a tie' : `<span>${choice}</span> Answer ${choice}`, `data-vote="${choice}" ${editingVote ? `aria-pressed="${current.vote === choice}"` : ''}`, `vote-button${choice === 'tie' ? ' tie' : ''}`)).join('')}</div>`;
+}
+function setVoteEditing(editing) {
+  if (!session().vote) return;
+  editingVote = editing;
+  renderDock();
+  $(editing ? `[data-vote="${session().vote}"]` : '[data-action="change-vote"]').focus({ preventScroll: true });
 }
 function syncMobile() {
   $$('.answer-panel').forEach(node => node.dataset.mobileHidden = compact.matches && node.dataset.side !== mobileSide);
@@ -192,23 +203,26 @@ function keep(side, index, quote = null) {
   toast(removing ? `Evidence removed from answer ${side}` : `${quote ? 'Excerpt' : 'Passage'} kept from answer ${side}`);
 }
 function vote(choice) {
-  if (session().vote) return;
-  state = castVote(state, state.sampleId, choice); persist(); hideSelection();
+  const previous = session().vote;
+  if (previous && !editingVote) return;
+  state = castVote(state, state.sampleId, choice); editingVote = false;
+  persist(); hideSelection();
   syncHeaders(); syncPassages(); renderEvidence(); renderDock(); syncNavigation();
-  sides.forEach((side, index) => feel.animate($(`.answer-panel[data-side="${side}"] .answer-identity`), [{ transform: 'translateY(6px)', opacity: .2 }, { transform: 'none', opacity: 1 }], { duration: 240, delay: index * 40 }));
+  if (!previous) sides.forEach((side, index) => feel.animate($(`.answer-panel[data-side="${side}"] .answer-identity`), [{ transform: 'translateY(6px)', opacity: .2 }, { transform: 'none', opacity: 1 }], { duration: 240, delay: index * 40 }));
   $('.saved-decision').focus({ preventScroll: true });
-  feel.haptic('vote'); toast('Decision saved. Model identities revealed.');
+  if (choice !== previous) feel.haptic('vote');
+  toast(previous ? choice === previous ? 'Vote unchanged.' : 'Vote updated. Your notes and evidence are preserved.' : 'Decision saved. Model identities revealed.');
 }
 function changeSample(id) {
   if (!examples.some(ex => ex.id === id)) return;
   if (compact.matches) setDrawer(false);
-  state.sampleId = id; mobileSide = 'A'; persist(); renderSample();
+  state.sampleId = id; mobileSide = 'A'; editingVote = false; persist(); renderSample();
   feel.animate($('#answers'), [{ transform: 'translateX(10px)', opacity: .3 }, { transform: 'none', opacity: 1 }], { duration: 200 });
 }
 function openLibrary(page) {
   const rows = decisions(state);
   $('#library-title').textContent = page === 'scores' ? 'Your scorecard' : 'Your notebook';
-  $('.library-content').innerHTML = page === 'scores' ? `<p class="library-intro">A record of your choices across these three examples. Model names are fictional; this is your session, not a public ranking.</p><table class="scores"><caption>${rows.length} of ${examples.length} comparisons completed</caption><thead><tr><th scope="col">Model</th><th scope="col">Wins</th><th scope="col">Ties</th><th scope="col">Losses</th></tr></thead><tbody>${Object.entries(scores(state)).map(([model, score]) => `<tr><th scope="row">${model}</th><td>${score.wins}</td><td>${score.ties}</td><td>${score.losses}</td></tr>`).join('')}</tbody></table>` : rows.length ? `<p class="library-intro">Your decisions, with the reasoning attached. Reopen any comparison to see the original evidence.</p>${rows.map(row => { const ex = examples.find(e => e.id === row.sampleId); return button('revisit', `<span>${escape(ex.title)}<small>${row.vote === 'tie' ? 'Tie' : `${ex.answers[row.vote].model} preferred`} · ${Object.keys(row.marks).length} ${Object.keys(row.marks).length === 1 ? 'passage' : 'passages'} kept${row.reason ? ` · ${escape(row.reason)}` : ''}${row.note ? `<br>${escape(row.note)}` : ''}</small></span>${icon('arrow')}`, `data-sample="${ex.id}"`, 'history-item'); }).join('')}` : `<div class="empty-library"><h3>Your first decision starts here.</h3><p>Compare the answers, keep a useful passage, and vote. The reasoning will be here when you come back.</p>${button('close-dialog', 'Back to comparison', '', 'quiet-button')}</div>`;
+  $('.library-content').innerHTML = page === 'scores' ? `<p class="library-intro">A record of your choices across these three examples. Model names are fictional; this is your session, not a public ranking. Scores reflect your latest votes.</p><table class="scores"><caption>${rows.length} of ${examples.length} comparisons completed</caption><thead><tr><th scope="col">Model</th><th scope="col">Wins</th><th scope="col">Ties</th><th scope="col">Losses</th></tr></thead><tbody>${Object.entries(scores(state)).map(([model, score]) => `<tr><th scope="row">${model}</th><td>${score.wins}</td><td>${score.ties}</td><td>${score.losses}</td></tr>`).join('')}</tbody></table>` : rows.length ? `<p class="library-intro">Your decisions, with the reasoning attached. Reopen any comparison to see the original evidence.</p>${rows.map(row => { const ex = examples.find(e => e.id === row.sampleId); return button('revisit', `<span>${escape(ex.title)}<small>${row.vote === 'tie' ? 'Tie' : `${ex.answers[row.vote].model} preferred`} · ${Object.keys(row.marks).length} ${Object.keys(row.marks).length === 1 ? 'passage' : 'passages'} kept${row.reason ? ` · ${escape(row.reason)}` : ''}${row.edited ? '<br>Edited after reveal' : ''}${row.note ? `<br>${escape(row.note)}` : ''}</small></span>${icon('arrow')}`, `data-sample="${ex.id}"`, 'history-item'); }).join('')}` : `<div class="empty-library"><h3>Your first decision starts here.</h3><p>Compare the answers, keep a useful passage, and vote. The reasoning will be here when you come back.</p>${button('close-dialog', 'Back to comparison', '', 'quiet-button')}</div>`;
   openDialog($('#library'));
 }
 function openDialog(dialog) {
@@ -257,6 +271,8 @@ $('#workspace-app').addEventListener('click', event => {
     $$('[data-action="reason"]').forEach(node => node.setAttribute('aria-pressed', node.dataset.reason === session().reason));
   }
   if (action === 'vote') vote(target.dataset.vote);
+  if (action === 'change-vote') setVoteEditing(true);
+  if (action === 'cancel-vote') setVoteEditing(false);
   if (action === 'sample') changeSample(target.dataset.sample);
   if (action === 'tab') { mobileSide = side; syncMobile(); hideSelection(); feel.animate($(`.answer-panel[data-side="${side}"]`), [{ opacity: .3, transform: `translateX(${side === 'A' ? -8 : 8}px)` }, { opacity: 1, transform: 'none' }], { duration: 200 }); }
   if (action === 'next') { const next = examples.find(ex => !state.sessions[ex.id].vote); if (next) { changeSample(next.id); $('#answers').focus(); } }
@@ -299,7 +315,7 @@ document.addEventListener('keyup', event => { if (event.key === 'Shift') inspect
 document.addEventListener('scroll', hideSelection, true);
 document.addEventListener('keydown', event => {
   if ($('dialog[open]')) return;
-  if (event.key === 'Escape') { if (selection) { hideSelection(); window.getSelection()?.removeAllRanges(); } else if (drawerOpen) setDrawer(false); }
+  if (event.key === 'Escape') { if (selection) { hideSelection(); window.getSelection()?.removeAllRanges(); } else if (drawerOpen) setDrawer(false); else if (editingVote) setVoteEditing(false); }
   if (event.key === 'Tab' && drawerOpen && compact.matches) {
     const focusable = $$('button:not(:disabled),textarea', $('#evidence-drawer')).filter(node => node.getClientRects().length);
     const first = focusable[0], last = focusable.at(-1);
