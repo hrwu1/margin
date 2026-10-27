@@ -22,10 +22,10 @@ Document the goal and completion criteria here before implementation. Make focus
 
 Goal: let users choose exactly two distinct GPT text-generation models available to the backend's OpenAI API key before each comparison.
 
-- [ ] Discover available GPT text models through OpenAI's model-list API, keeping aliases and snapshots and excluding non-text modalities.
-- [ ] Route supported text models to their documented generation endpoints, keeping credentials server-side and avoiding automatic paid retries.
-- [ ] Validate and persist the chosen pair, including request-ID conflicts, while preserving randomized A/B assignment, reveal after voting, history, and scores.
-- [ ] Add labelled, keyboard-accessible selectors, loading/error/retry states, and responsive styling; preserve offline fixtures.
+- [x] Discover available GPT text models through OpenAI's model-list API, keeping aliases and snapshots and excluding non-text modalities.
+- [x] Route supported text models to their documented generation endpoints, keeping credentials server-side and avoiding automatic paid retries.
+- [x] Validate and persist the chosen pair, including request-ID conflicts, while preserving randomized A/B assignment, reveal after voting, history, and scores.
+- [x] Add labelled, keyboard-accessible selectors, loading/error/retry states, and responsive styling; preserve offline fixtures.
 - [ ] Update the README; verify automated checks, desktop/mobile interaction, and a bounded live comparison with inexpensive models.
 - [ ] Commit tested steps, merge cleanly into the original checkout, and remove the temporary worktree.
 

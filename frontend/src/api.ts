@@ -12,6 +12,7 @@ export type Comparison = {
 export type HistoryPage = { items: (Pick<Comparison, 'id' | 'prompt' | 'status' | 'created_at'> & { vote: Choice | null; edited: number })[]; has_more: boolean };
 export type Score = { model: string; wins: number; ties: number; losses: number; compared: number };
 export type Session = { provider_mode: string; max_prompt_length: number };
+export type ModelCatalog = { items: string[]; defaults: string[] };
 
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   let response: Response;

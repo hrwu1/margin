@@ -9,6 +9,7 @@ import pytest
 from app.config import Settings
 from app.db import Database
 from app.main import COOKIE, create_app
+from app.providers import ProviderFailure
 
 HEADERS = {'X-Margin-Client': 'web'}
 
@@ -20,6 +21,9 @@ class ControlledProvider:
     def __init__(self, failure=None):
         self.failure = failure
         self.calls = []
+
+    async def list_models(self):
+        return self.models
 
     async def generate(self, model, prompt):
         self.calls.append(model)
@@ -40,8 +44,8 @@ def session(client):
     return response
 
 
-def submit(client, prompt='Explain an index', request_id=None):
-    response = client.post('/api/comparisons', json={'prompt': prompt, 'request_id': request_id or str(uuid4())}, headers=HEADERS)
+def submit(client, prompt='Explain an index', request_id=None, models=('test-fast', 'test-slow')):
+    response = client.post('/api/comparisons', json={'prompt': prompt, 'models': models, 'request_id': request_id or str(uuid4())}, headers=HEADERS)
     assert response.status_code in (200, 202), response.text
     return response.json()
 
@@ -137,7 +141,7 @@ def test_validation_sessions_and_origin_protection(settings):
         assert client.post('/api/session', headers={**HEADERS, 'Origin': 'https://unrelated.example'}).status_code == 403
         assert client.post('/api/session', headers={**HEADERS, 'Origin': 'http://testserver'}).status_code == 200
         for prompt in ('', '   ', 'x' * 12001, 42):
-            response = client.post('/api/comparisons', json={'request_id': str(uuid4()), 'prompt': prompt}, headers=HEADERS)
+            response = client.post('/api/comparisons', json={'request_id': str(uuid4()), 'prompt': prompt, 'models': ['test-fast', 'test-slow']}, headers=HEADERS)
             assert response.status_code == 422
             assert 'input' not in str(response.json())
         assert client.post('/api/comparisons', json={'request_id': 'invalid', 'prompt': 'hello'}, headers=HEADERS).status_code == 422
@@ -198,3 +202,62 @@ def test_annotations_and_vote_revision_api(settings):
         session(client)
         assert client.patch(f'{base}/vote', json={'choice': 'A', 'revision': 1}, headers=HEADERS).status_code == 404
         assert client.put(f'{base}/annotations', json=document, headers=HEADERS).status_code == 404
+
+
+def test_model_selection_generates_selected_pair_and_preserves_reveal_and_history(settings):
+    provider = ControlledProvider()
+    provider.models = ('test-fast', 'test-slow', 'test-third')
+    with TestClient(create_app(settings, provider)) as client:
+        assert client.get('/api/models').status_code == 401
+        session(client)
+        token = client.cookies[COOKIE]
+        assert client.get('/api/models').json() == {'items': list(provider.models), 'defaults': ['test-fast', 'test-slow']}
+        request_id = str(uuid4())
+        selected = ['test-third', 'test-fast']
+        created = submit(client, request_id=request_id, models=selected)
+        assert submit(client, request_id=request_id, models=selected[::-1])['id'] == created['id']
+        finished = settle(client, created['id'])
+        assert finished['status'] == 'ready'
+        assert sorted(provider.calls) == sorted(selected)
+        assert all(answer['model'] is None for answer in finished['responses'])
+        changed = client.post('/api/comparisons', json={'prompt': 'Explain an index', 'request_id': request_id, 'models': ['test-fast', 'test-slow']}, headers=HEADERS)
+        assert changed.status_code == 409
+        voted = client.post(f'/api/comparisons/{created["id"]}/vote', json={'choice': 'tie'}, headers=HEADERS).json()
+        assert sorted(answer['model'] for answer in voted['responses']) == sorted(selected)
+        assert {row['model'] for row in client.get('/api/scores').json()['items']} == set(selected)
+        assert len(provider.calls) == 2
+    with TestClient(create_app(settings, ControlledProvider())) as client:
+        client.cookies.set(COOKIE, token, path='/api')
+        assert client.get(f'/api/comparisons/{created["id"]}').json() == voted
+        assert {row['model'] for row in client.get('/api/scores').json()['items']} == set(selected)
+
+
+@pytest.mark.parametrize('models', [None, [], ['test-fast'], ['test-fast', 'test-slow', 'extra'],
+                                     ['test-fast', 'test-fast'], ['test-fast', 'unknown'], ['test-fast', 42]])
+def test_invalid_selection_never_starts_generation(settings, models):
+    provider = ControlledProvider()
+    with TestClient(create_app(settings, provider)) as client:
+        session(client)
+        response = client.post('/api/comparisons', json={'request_id': str(uuid4()), 'prompt': 'private prompt', 'models': models}, headers=HEADERS)
+        assert response.status_code == 422
+        assert 'private prompt' not in response.text
+        assert not provider.calls
+        assert client.get('/api/comparisons').json()['items'] == []
+
+
+def test_catalog_failure_keeps_history_available_and_allows_retry(settings):
+    class Unavailable(ControlledProvider):
+        async def list_models(self):
+            if self.failure:
+                raise ProviderFailure('credentials')
+            return self.models
+    provider = Unavailable('error')
+    with TestClient(create_app(settings, provider)) as client:
+        session(client)
+        response = client.get('/api/models')
+        assert response.status_code == 503 and 'model list' in response.json()['detail']
+        assert client.get('/api/comparisons').status_code == 200
+        assert client.get('/api/scores').status_code == 200
+        provider.failure = None
+        assert client.get('/api/models').status_code == 200
+        assert settle(client, submit(client)['id'])['status'] == 'ready'

@@ -155,3 +155,14 @@
   .scorecard-models{grid-template-columns:1fr}.scorecard-model{padding:16px}.scorecard-rate{margin-top:14px}.scorecard-rate strong{font-size:36px}
   .scorecard-context{flex-wrap:wrap}.scorecard-context button{margin-left:29px}.scorecard-context>div{flex-basis:calc(100% - 29px)}
 }
+
+.model-picker{border:0;padding:0;margin:0;min-width:0}
+.model-picker legend{font-size:12px;font-weight:500;padding:0;margin-bottom:14px}
+.model-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.model-fields label{min-width:0;color:var(--secondary);margin:0}
+.model-fields select{display:block;width:100%;min-height:44px;margin-top:8px;padding:9px;border:1px solid var(--line);border-radius:6px;background:var(--canvas);color:var(--ink)}
+.model-picker:disabled{opacity:.6}
+.model-help{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0 20px;padding-bottom:16px;border-bottom:1px solid var(--line);font-size:11px;line-height:1.6;color:var(--muted)}
+.model-help p{flex:1}
+.model-help button{font-size:11px;flex-shrink:0}
+@media(max-width:600px){.model-fields{grid-template-columns:minmax(0,1fr);gap:12px}.model-fields select{font-size:16px}.model-help{align-items:flex-start;flex-direction:column;gap:4px}}

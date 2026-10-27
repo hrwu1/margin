@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from './api';
-import type { Comparison, HistoryPage, Score, Session } from './api';
+import type { Comparison, HistoryPage, ModelCatalog, Score, Session } from './api';
 import { ComparisonPanel } from './ComparisonPanel';
 import { Scorecard } from './Scorecard';
 import type { ComparisonHandle } from './ComparisonPanel';
@@ -15,6 +15,11 @@ const starters = [
 ];
 export function App() {
   const [session, setSession] = useState<Session | null>(null);
+  const [catalog, setCatalog] = useState<ModelCatalog | null>(null);
+  const [models, setModels] = useState<[string, string]>(['', '']);
+  const [modelError, setModelError] = useState('');
+  const [modelsLoading, setModelsLoading] = useState(true);
+  const [modelReload, setModelReload] = useState(0);
   const [id, setId] = useState(currentId);
   const [comparison, setComparison] = useState<Comparison | null>(null);
   const [prompt, setPrompt] = useState('');
@@ -32,11 +37,12 @@ export function App() {
   const [toast, setToast] = useState('');
   const [reload, setReload] = useState(0);
   const panel = useRef<ComparisonHandle>(null);
-  const creation = useRef<{ prompt: string; id: string } | null>(null);
+  const creation = useRef<{ key: string; id: string } | null>(null);
   const overviewVersion = useRef(0);
   const navigationVersion = useRef(0);
   const feedback = useFeedback();
   const visible = comparison?.id === id ? comparison : null;
+  const validModels = !modelsLoading && !modelError && models[0] !== models[1] && models.every(model => catalog?.items.includes(model));
   const notify = useCallback((message: string) => setToast(message), []);
   useEffect(() => { if (toast) { const timer = setTimeout(() => setToast(''), 3200); return () => clearTimeout(timer); } }, [toast]);
   const refreshOverview = useCallback(async (page = 0) => {
@@ -53,6 +59,23 @@ export function App() {
     api<Session>('/session', { method: 'POST' }).then(value => { if (active) { setSession(value); void refreshOverview(); } }).catch(failure => { if (active) setError(errorMessage(failure)); });
     return () => { active = false; };
   }, [refreshOverview]);
+  useEffect(() => {
+    if (!session) return;
+    const controller = new AbortController();
+    setModelsLoading(true); setModelError('');
+    api<ModelCatalog>('/models', { signal: controller.signal }).then(value => {
+      if (controller.signal.aborted) return;
+      setCatalog(value);
+      setModels(previous => {
+        const first = value.items.includes(previous[0]) ? previous[0] : value.defaults[0] || '';
+        const second = previous[1] !== first && value.items.includes(previous[1]) ? previous[1]
+          : [...value.defaults, ...value.items].find(model => model !== first) || '';
+        return [first, second];
+      });
+    }).catch(failure => { if (!controller.signal.aborted) setModelError(errorMessage(failure)); })
+      .finally(() => { if (!controller.signal.aborted) setModelsLoading(false); });
+    return () => controller.abort();
+  }, [session, modelReload]);
   useEffect(() => {
     const change = async () => {
       const next = currentId();
@@ -100,11 +123,12 @@ export function App() {
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     const text = prompt.trim();
-    if (!text || submitting || !session) return;
-    if (creation.current?.prompt !== text) creation.current = { prompt: text, id: crypto.randomUUID() };
+    if (!text || submitting || !session || !validModels) return;
+    const key = JSON.stringify([text, [...models].sort()]);
+    if (creation.current?.key !== key) creation.current = { key, id: crypto.randomUUID() };
     setSubmitting(true); setError('');
     try {
-      const created = await api<Comparison>('/comparisons', { method: 'POST', body: JSON.stringify({ prompt: text, request_id: creation.current.id }) });
+      const created = await api<Comparison>('/comparisons', { method: 'POST', body: JSON.stringify({ prompt: text, models, request_id: creation.current.id }) });
       setComparison(created); location.hash = `compare/${created.id}`; setId(created.id);
       creation.current = null; feedback.pulse(); void refreshOverview();
     } catch (failure) { setError(errorMessage(failure)); }
@@ -141,9 +165,25 @@ export function App() {
         {(error || pollError || overviewError) && <div className="storage-warning" role="alert">{error || pollError || overviewError} <button className="quiet-button" onClick={() => { if (!session) location.reload(); else { setReload(value => value + 1); void refreshOverview(); } }}>Reconnect</button></div>}
         {id ? visible ? <ComparisonPanel key={visible.id} ref={panel} comparison={visible} onSaved={saved} drawerOpen={drawerOpen} setDrawerOpen={setDrawerOpen} onNew={text => void navigate(null, text)} feedback={feedback} notify={notify}/> : <div className="loading-workspace" role="status">{error ? 'This comparison could not be opened.' : 'Opening comparison…'}<button className="quiet-button" onClick={() => void navigate(null)}>New comparison</button></div> : <section className="composer-region">
           <div className="composer-intro"><span className="eyebrow">A comparison worth keeping</span><h1>One prompt.<br/>Two perspectives.</h1><p>Read without a label. Highlight what matters.<br/>Decide which answer works better for you.</p></div>
-          <form className="prompt-composer" onSubmit={submit}><label htmlFor="prompt">What would you like to compare?</label><textarea id="prompt" value={prompt} maxLength={session?.max_prompt_length || 12000} onChange={event => setPrompt(event.target.value)} placeholder="Ask a question, paste some code, or give the models a task…" required disabled={submitting} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }}/><div className="composer-actions"><span>{prompt.length.toLocaleString()} / 12,000 <kbd>⌘ / Ctrl ↵</kbd></span><button className="primary" disabled={!session || submitting || !prompt.trim()}>{submitting ? 'Starting…' : 'Compare answers'} <Icon name="arrow"/></button></div></form>
+          <form className="prompt-composer" onSubmit={submit}>
+            <fieldset className="model-picker" disabled={!session || submitting || modelsLoading || !!modelError || !catalog?.items.length} aria-describedby="model-help">
+              <legend>{session?.provider_mode === 'mock' ? 'Choose two offline fixtures' : 'Choose two OpenAI models'}</legend>
+              <div className="model-fields">{([0, 1] as const).map(index => <label key={index} htmlFor={`model-${index}`}>Model {index + 1}
+                <select id={`model-${index}`} value={models[index]} required onChange={event => setModels(previous => index === 0 ? [event.target.value, previous[1]] : [previous[0], event.target.value])}>
+                  <option value="" disabled>Select a model</option>
+                  {catalog?.items.map(model => <option key={model} value={model} disabled={model === models[1 - index]}>{model}</option>)}
+                </select>
+              </label>)}</div>
+            </fieldset>
+            <div className="model-help" id="model-help">
+              {modelsLoading ? <p role="status">Loading available models…</p> : modelError ? <p role="alert">{modelError}</p>
+                : (catalog?.items.length || 0) < 2 ? <p role="alert">At least two available models are needed to compare.</p>
+                  : <p>{catalog?.items.length} available · Answer order is randomized and hidden until you vote.</p>}
+              <button type="button" className="quiet-button" disabled={!session || submitting || modelsLoading} onClick={() => setModelReload(value => value + 1)}>{modelError ? 'Retry model list' : 'Reload model list'}</button>
+            </div>
+            <label htmlFor="prompt">What would you like to compare?</label><textarea id="prompt" value={prompt} maxLength={session?.max_prompt_length || 12000} onChange={event => setPrompt(event.target.value)} placeholder="Ask a question, paste some code, or give the models a task…" required disabled={submitting} onKeyDown={event => { if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }}/><div className="composer-actions"><span>{prompt.length.toLocaleString()} / 12,000 <kbd>⌘ / Ctrl ↵</kbd></span><button className="primary" disabled={!session || submitting || !prompt.trim() || !validModels}>{submitting ? 'Starting…' : 'Compare answers'} <Icon name="arrow"/></button></div></form>
           <div className="prompt-starters"><span>Try a starting point</span>{starters.map(item => <button className="quiet-button" key={item.title} disabled={submitting} onClick={() => { setPrompt(item.prompt); document.getElementById('prompt')?.focus(); }}>{item.title} <Icon name="arrow"/></button>)}</div>
-          <p className="session-explainer">{session?.provider_mode === 'mock' ? 'Offline development mode. Responses are deterministic fixtures; no AI model is called.' : 'Compares GPT-5.6 Luna and GPT-6 Luna. Prompts are sent to OpenAI; comparisons and notes are saved in this app’s database. Your browser cookie keeps your history connected.'}</p>
+          <p className="session-explainer">{session?.provider_mode === 'mock' ? 'Offline development mode. Responses are deterministic fixtures; no AI model is called.' : 'Each comparison sends your prompt to the two selected OpenAI models. API costs vary by model. Comparisons and notes are saved in this app’s database; your browser cookie keeps your history connected.'}</p>
         </section>}
         <footer className="workspace-foot"><span><Icon name="lock"/>{session?.provider_mode === 'openai' ? 'Private to this browser session' : 'Local fixture mode'}</span><span>Highlights are optional · Your scorecard reflects your votes</span><div className="mobile-library"><button onClick={() => { setDialog('Notebook'); void refreshOverview(); }}>Notebook</button> · <button onClick={() => { setDialog('Scorecard'); void refreshOverview(); }}>Scores</button> · <button onClick={() => setDialog('Interaction settings')}>Settings</button></div></footer>
       </main>
