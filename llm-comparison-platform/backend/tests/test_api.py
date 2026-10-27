@@ -165,5 +165,5 @@ def test_secure_cookie_and_unknown_provider(settings):
     secure = Settings(database_path=settings.database_path, cookie_secure=True)
     with TestClient(create_app(secure, ControlledProvider()), base_url='https://testserver') as client:
         assert 'Secure' in session(client).headers['set-cookie']
-    with pytest.raises(ValueError, match='Only MARGIN_PROVIDER=mock'):
+    with pytest.raises(ValueError, match='Use MARGIN_PROVIDER=openai or mock'):
         create_app(Settings(provider='not-configured'))

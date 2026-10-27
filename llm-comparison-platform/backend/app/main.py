@@ -14,11 +14,17 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .config import Settings
 from .db import Capacity, Conflict, Database, InvalidVote, NotFound, paragraphs
-from .providers import Provider, configured_provider
+from .providers import Provider, ProviderFailure, configured_provider
 
 logger = logging.getLogger(__name__)
 COOKIE = 'margin_session'
 ERRORS = {
+    'credentials': 'The server’s OpenAI key is invalid or lacks permission. Check the server configuration.',
+    'quota': 'The OpenAI project has no available API quota. Check its billing or credits.',
+    'rate_limit': 'OpenAI is temporarily rate limiting requests. Wait before starting a new comparison.',
+    'model_unavailable': 'A configured model is unavailable to this OpenAI project.',
+    'incomplete': 'This answer reached its output limit. Try a narrower prompt.',
+    'refusal': 'This model declined the request. Try a different prompt.',
     'timeout': 'This response took too long. Start a new comparison to try again.',
     'provider_error': 'This response could not be generated. Start a new comparison to try again.',
     'invalid_response': 'The provider returned an empty or oversized response.',
@@ -71,7 +77,7 @@ def public_comparison(record):
 
 def create_app(settings: Settings | None = None, provider: Provider | None = None) -> FastAPI:
     settings = settings or Settings.from_environment()
-    provider = provider or configured_provider(settings.provider)
+    provider = provider or configured_provider(settings.provider, settings.api_key, settings.timeout_seconds)
     if len(provider.models) != 2 or len(set(provider.models)) != 2:
         raise ValueError('Configure exactly two distinct model identities.')
     db = Database(settings.database_path)
@@ -149,6 +155,8 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
                 error = 'invalid_response'
             else:
                 content = output.strip()
+        except ProviderFailure as failure:
+            error = failure.code
         except TimeoutError:
             error = 'timeout'
         except asyncio.CancelledError:
