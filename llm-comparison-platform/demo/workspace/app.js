@@ -5,6 +5,8 @@ const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const paths = {
+  sun:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>',
+  moon:'<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5Z"/>',
   compare:'<rect x="3" y="4" width="7" height="16" rx="1"/><rect x="14" y="4" width="7" height="16" rx="1"/>',
   book:'<path d="M4 4h6l2 2 2-2h6v15h-6l-2 2-2-2H4zM12 6v15"/>',
   scores:'<path d="M5 20V10M12 20V4M19 20v-6"/>',
@@ -44,7 +46,7 @@ $('#workspace-app').innerHTML = `<div class="app-shell">
     <div class="sidebar-bottom"><div class="session-label">${icon('lock')}<span>Anonymous session</span></div>${button('settings', `${icon('settings')}<span>Interaction settings</span>`, 'title="Interaction settings"', 'nav-button')}</div>
   </aside>
   <main class="workspace" id="main">
-    <header class="topbar"><div class="breadcrumb"><span>Comparisons</span><span class="slash">/</span><strong id="category"></strong></div><span class="mobile-brand">margin</span><select class="mobile-picker" aria-label="Example comparison">${examples.map(ex => `<option value="${ex.id}">${escape(ex.category)}</option>`).join('')}</select><div class="header-tools"><span class="demo-label">Interactive demo</span>${button('drawer', `${icon('panel')} Evidence <span class="evidence-count">0</span>`, 'id="evidence-toggle" aria-expanded="false" aria-controls="evidence-drawer"', 'evidence-toggle')}</div></header>
+    <header class="topbar"><div class="breadcrumb"><span>Comparisons</span><span class="slash">/</span><strong id="category"></strong></div><span class="mobile-brand">margin</span><select class="mobile-picker" aria-label="Example comparison">${examples.map(ex => `<option value="${ex.id}">${escape(ex.category)}</option>`).join('')}</select><div class="header-tools"><span class="demo-label">Interactive demo</span>${button('theme', '', 'id="theme-toggle"', 'icon-button theme-toggle')}${button('drawer', `${icon('panel')} Evidence <span class="evidence-count">0</span>`, 'id="evidence-toggle" aria-expanded="false" aria-controls="evidence-drawer"', 'evidence-toggle')}</div></header>
     <p class="storage-warning" role="alert" hidden></p>
     <section class="prompt-region" aria-label="Shared prompt"></section>
     <div class="workspace-body">
@@ -62,6 +64,22 @@ $('#workspace-app').innerHTML = `<div class="app-shell">
 </div>
 <dialog id="library" class="dialog" aria-labelledby="library-title"><header class="dialog-heading"><h2 id="library-title"></h2>${button('close-dialog', icon('close'), 'aria-label="Close notebook or scorecard"')}</header><div class="library-content"></div><footer class="dialog-footer">${button('close-dialog', 'Back to comparison', '', 'quiet-button')}</footer></dialog>
 <dialog id="settings" class="dialog settings-dialog" aria-labelledby="settings-title"><header class="dialog-heading"><h2 id="settings-title">Interaction settings</h2>${button('close-dialog', icon('close'), 'aria-label="Close settings"')}</header><div class="settings-content"><div class="preference"><span>Fluid motion</span>${button('preference', '', 'data-preference="motion" aria-label="Fluid motion"', '')}</div><div class="preference"><span>Touch vibration</span>${button('preference', '', 'data-preference="vibration" aria-label="Touch vibration"', '')}</div><p id="motion-help"></p><p>Vibration requires a supported touch device and browser. Every action also has visible feedback.</p></div></dialog>`;
+
+function syncTheme() {
+  const light = document.documentElement.dataset.theme === 'light';
+  const control = $('#theme-toggle');
+  control.innerHTML = icon(light ? 'moon' : 'sun');
+  control.setAttribute('aria-label', light ? 'Switch to dark mode' : 'Switch to light mode');
+  control.title = light ? 'Switch to dark mode' : 'Switch to light mode';
+  $('meta[name="theme-color"]').content = light ? '#ffffff' : '#08090a';
+}
+function toggleTheme() {
+  const theme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = theme;
+  syncTheme();
+  try { storage.setItem('margin-workspace-theme-v1', theme); }
+  catch { toast('Theme changed for this visit. Browser storage is unavailable.'); }
+}
 
 function persist() {
   try { storage.setItem(STORAGE_KEY, JSON.stringify(state)); storageError = ''; }
@@ -226,6 +244,7 @@ $('#workspace-app').addEventListener('click', event => {
   const target = event.target.closest('button[data-action]');
   if (!target || target.disabled) return;
   const { action, side, index } = target.dataset;
+  if (action === 'theme') toggleTheme();
   if (action === 'drawer') setDrawer(!drawerOpen, true);
   if (action === 'close-drawer') setDrawer(false);
   if (action === 'keep') keep(side, Number(index));
@@ -290,4 +309,4 @@ document.addEventListener('keydown', event => {
 });
 compact.addEventListener('change', () => { hideSelection(); syncMobile(); });
 window.addEventListener('resize', hideSelection);
-renderSample(); syncPreferences();
+renderSample(); syncPreferences(); syncTheme();

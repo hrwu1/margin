@@ -14,3 +14,54 @@
 .drawer-return{display:none}@media(max-width:900px){.drawer-return{display:block;flex-shrink:0;padding:12px 20px;border-top:1px solid var(--line)}.drawer-return button{width:100%;min-height:40px}}
 
 @media(max-width:600px){.workspace-foot>#save-status{display:none}.workspace-foot>span:first-child,.mobile-library{white-space:nowrap}.workspace-foot{gap:8px}}
+
+/* Theme changes only colors; the comparison's DOM and reading position stay intact. */
+.theme-toggle{border:1px solid var(--line);min-width:36px;min-height:36px;color:var(--secondary)}
+@media(max-width:600px){.mobile-picker{max-width:104px}.theme-toggle{min-width:32px;min-height:34px}.header-tools{gap:6px}}
+:root[data-theme=light]{
+  color-scheme:light;
+  --canvas:#ffffff;--sidebar:#f6f7f9;--surface:#f8f9fb;--raised:#eceff3;
+  --line:#dce0e6;--ink:#20242c;--secondary:#48515e;--muted:#626b78;
+  --control-border:#939daa;--body-text:#3f4855;--code-surface:#f3f5f8;
+  --selection:#e6edac;--focus:#626d00;--hover:#e7ebf0;
+  --warning-surface:#fff3df;--warning-text:#7a420b;
+  --overlay:#20242c40;--floating-shadow:#20242c26;
+}
+:root[data-theme=light] button:hover{background:var(--hover)}
+:root[data-theme=light] :is(button,a,select,textarea):focus-visible{outline-color:var(--focus)}
+:root[data-theme=light] ::selection{background:var(--selection);color:var(--ink)}
+:root[data-theme=light] ::-webkit-scrollbar-thumb{background:var(--control-border)}
+:root[data-theme=light] .sample-button[aria-current=true]{background:var(--raised);box-shadow:inset 2px 0 var(--secondary)}
+:root[data-theme=light] :is(.breadcrumb .slash,.passage-index){color:var(--muted)}
+:root[data-theme=light] .evidence-count{background:var(--raised)}
+:root[data-theme=light] .evidence-toggle[aria-expanded=true]{border-color:var(--control-border)}
+:root[data-theme=light] :is(.prompt-region,.decision-dock){background:var(--sidebar)}
+:root[data-theme=light] .answer-panel{background:var(--canvas)}
+:root[data-theme=light] :is(.answer-header,.passage+.passage){border-color:var(--line)}
+:root[data-theme=light] .letter{border-color:var(--control-border)}
+:root[data-theme=light] :is(.passage-text,.evidence-card blockquote,.evidence-card pre){color:var(--body-text)}
+:root[data-theme=light] .passage pre{background:var(--code-surface);border-color:var(--line);color:var(--body-text)}
+:root[data-theme=light] .passage.marked{background:var(--surface);box-shadow:inset 2px 0 var(--muted)}
+:root[data-theme=light] .passage mark{background:var(--selection);border-color:var(--muted)}
+:root[data-theme=light] .answer-panel.preferred .letter{border-color:var(--ink)}
+:root[data-theme=light] .answer-panel.preferred .answer-header{box-shadow:inset 0 2px var(--ink)}
+:root[data-theme=light] .vote-button{background:var(--canvas);border-color:var(--control-border)}
+:root[data-theme=light] .vote-button:hover{background:var(--raised);border-color:var(--muted)}
+:root[data-theme=light] .saved-decision>.saved-icon{background:var(--raised)}
+:root[data-theme=light] .primary:hover{background:var(--accent)}
+:root[data-theme=light] .empty-evidence{border-color:var(--control-border)}
+:root[data-theme=light] .evidence-card{background:var(--canvas);border-color:var(--line)}
+:root[data-theme=light] :is(.evidence-card header,.show-passage){border-color:var(--line)}
+:root[data-theme=light] .reasons button{border-color:var(--control-border)}
+:root[data-theme=light] .reasons button[aria-pressed=true]{background:var(--raised);border-color:var(--muted)}
+:root[data-theme=light] .reason-section textarea{background:var(--canvas);border-color:var(--control-border)}
+:root[data-theme=light] .reason-section textarea::placeholder{color:var(--muted)}
+:root[data-theme=light] .storage-warning{background:var(--warning-surface);color:var(--warning-text)}
+:root[data-theme=light] #selection-tools{background:var(--canvas);color:var(--ink);border-color:var(--control-border);box-shadow:0 6px 24px var(--floating-shadow)}
+:root[data-theme=light] #toast{background:var(--ink);color:var(--canvas);border-color:var(--ink);box-shadow:0 6px 22px var(--floating-shadow)}
+:root[data-theme=light] .dialog{background:var(--canvas);border-color:var(--control-border);box-shadow:0 18px 80px var(--floating-shadow)}
+:root[data-theme=light] .dialog::backdrop,:root[data-theme=light] .drawer-backdrop{background:var(--overlay)}
+:root[data-theme=light] .mobile-answer-tabs button[aria-pressed=true]{background:var(--raised);color:var(--ink)}
+:root[data-theme=light] .mobile-picker{background:var(--raised)}
+:root[data-theme=light] .evidence-drawer{border-color:var(--control-border)}
+:root[data-theme=light] .preference button[aria-pressed=true]:hover{background:var(--secondary);color:var(--canvas)}
