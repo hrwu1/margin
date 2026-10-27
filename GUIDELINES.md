@@ -46,7 +46,7 @@ Design: keep Margin's current typography, neutral surfaces, compact controls, an
 - [x] Reuse request IDs across reconnects; preserve the queue in this tab's session storage, restoring paused after reload. Completed comparisons stay in the existing notebook.
 - [x] Preserve annotation flush guards, single-prompt behavior, mobile controls, and reduced motion.
 - [x] Verify scheduling, errors, duplicate prevention, persistence, browser interactions, and five varied questions against both configured live models for less than $2.
-- [ ] Commit tested steps, merge cleanly into the original checkout, and remove the temporary worktree.
+- [x] Commit tested steps, merge cleanly into the original checkout, and remove the temporary worktree.
 
 Scope: the existing API and per-session generation limit remain the source of truth. Queue orchestration lives in the browser; closing the tab stops unsent questions. No backend queue service or dependencies are needed.
 
@@ -55,3 +55,5 @@ Completion requires passing automated checks and browser evidence, recorded real
 Queue verification: eight focused scheduler tests cover five-item order, overlapping ticks, pause during creation, incomplete pairs, lost POST responses, failed GET recovery, reload behavior, and input limits. They pass with the existing frontend tests.
 
 UI verification: 17 frontend tests, 32 backend tests, TypeScript, and the production build pass. Desktop/mobile browser checks and injected network/save/delayed-read failures pass. Two live five-question runs produced 20 successful responses for an estimated $0.0024263 total. Final generation time was 13.87 seconds, with 0.06–0.37 second inter-pair gaps. Detailed evidence and pricing sources are recorded in DESIGN_NOTES.md.
+
+Integration: the tested commits were fast-forward merged into the original checkout, its frontend was rebuilt, and the temporary worktree and test servers were removed. No push was performed.
