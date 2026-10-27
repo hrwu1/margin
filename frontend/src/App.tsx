@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, errorMessage } from './api';
 import type { Comparison, HistoryPage, Score, Session } from './api';
 import { ComparisonPanel } from './ComparisonPanel';
+import { Scorecard } from './Scorecard';
 import type { ComparisonHandle } from './ComparisonPanel';
 import { dateLabel } from './format';
 import { Dialog, Icon, useFeedback } from './ui';
@@ -24,7 +25,7 @@ export function App() {
   const [history, setHistory] = useState<HistoryPage>({ items: [], has_more: false });
   const [recent, setRecent] = useState<HistoryPage['items']>([]);
   const [offset, setOffset] = useState(0);
-  const [scores, setScores] = useState<Score[]>([]);
+  const [scores, setScores] = useState<Score[] | null>(null);
   const [dialog, setDialog] = useState<'Notebook' | 'Scorecard' | 'Interaction settings' | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [theme, setTheme] = useState(document.documentElement.dataset.theme || 'light');
@@ -149,9 +150,9 @@ export function App() {
     </div>
     {dialog && <Dialog title={dialog} close={() => setDialog(null)} small={dialog === 'Interaction settings'}>
       {dialog === 'Notebook' && <><p className="library-intro">Your prompts, decisions, and supporting highlights. Reopen a comparison to pick up where you left off. History belongs to this browser session.</p>{!history.items.length ? <div className="empty-library"><h3>Your notebook starts with a question.</h3><p>Compare your first pair of answers to save it here.</p><button className="primary" onClick={() => void navigate(null)}>New comparison</button></div> : history.items.map(item => <button className="history-item" key={item.id} onClick={() => void navigate(item.id)}><span>{item.prompt}<small>{dateLabel(item.created_at)} · {item.vote ? item.vote === 'tie' ? 'You chose a tie' : `You preferred ${item.vote}` : item.status === 'ready' ? 'Ready to vote' : item.status === 'failed' ? 'Incomplete pair' : 'Generating'}{item.edited ? ' · Edited after reveal' : ''}</small></span><Icon name="arrow"/></button>)}<div className="pagination"><button className="quiet-button" disabled={!offset} onClick={() => void refreshOverview(Math.max(0, offset - 20))}>Newer</button><span>Page {offset / 20 + 1}</span><button className="quiet-button" disabled={!history.has_more} onClick={() => void refreshOverview(offset + 20)}>Older</button></div></>}
-      {dialog === 'Scorecard' && <><p className="library-intro">A record of your preferences, not a universal model ranking. Each comparison counts once, using your latest vote. Changes after reveal stay labeled in your notebook.</p><div className="table-scroll"><table className="scores"><caption>Your personal comparison results</caption><thead><tr><th>Model</th><th>Wins</th><th>Ties</th><th>Losses</th></tr></thead><tbody>{scores.map(score => <tr key={score.model}><th>{score.model}</th><td>{score.wins}</td><td>{score.ties}</td><td>{score.losses}</td></tr>)}</tbody></table></div>{scores.every(score => !score.compared) && <p className="library-intro">No votes yet. Your first decision starts the scorecard.</p>}</>}
+      {dialog === 'Scorecard' && <Scorecard scores={scores} unavailable={!!overviewError} onNotebook={() => { setDialog('Notebook'); void refreshOverview(); }} onCompare={() => void navigate(null)}/>}
       {dialog === 'Interaction settings' && <div className="settings-content"><div className="preference"><span>Fluid motion</span><button aria-pressed={feedback.preferences.motion} onClick={() => feedback.toggle('motion')}>{feedback.preferences.motion ? 'On' : 'Off'}</button></div><div className="preference"><span>Touch vibration</span><button aria-pressed={feedback.preferences.vibration} onClick={() => feedback.toggle('vibration')}>{feedback.preferences.vibration ? 'On' : 'Off'}</button></div><p>{feedback.reduced ? 'Your device requests reduced motion, so animation and vibration are disabled.' : 'Highlights move into your collection. Panels move without interrupting reading.'}</p><p>Vibration requires a supported touch device and browser. Every action also has visible feedback.</p></div>}
-      {overviewError && <div role="alert" className="annotation-error"><p>{overviewError} Showing the last loaded results.</p><button className="quiet-button" onClick={() => void refreshOverview(offset)}>Retry loading</button></div>}
+      {overviewError && <div role="alert" className="annotation-error"><p>{overviewError} {scores ? 'Showing the last loaded results.' : 'Results have not loaded yet.'}</p><button className="quiet-button" onClick={() => void refreshOverview(offset)}>Retry loading</button></div>}
     </Dialog>}
     <div id="toast" className={toast ? 'visible' : ''} role="status" aria-live="polite">{toast}</div>
   </>;

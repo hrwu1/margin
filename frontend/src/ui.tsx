@@ -22,9 +22,13 @@ export function Dialog({ title, children, close, small = false }: { title: strin
   const ref = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const dialog = ref.current!;
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     dialog.showModal();
-    return () => dialog.close();
+    return () => { dialog.close(); if (opener?.isConnected) opener.focus(); };
   }, []);
+  useEffect(() => {
+    ref.current?.querySelector<HTMLButtonElement>('.dialog-heading button')?.focus();
+  }, [title]);
   return <dialog className={`dialog ${small ? 'settings-dialog' : ''}`} ref={ref} aria-labelledby="dialog-title" onCancel={close} onClose={close}>
     <header className="dialog-heading"><h2 id="dialog-title">{title}</h2><button className="icon-button" aria-label={`Close ${title}`} onClick={close}><Icon name="close"/></button></header>
     <div className="library-content">{children}</div>

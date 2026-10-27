@@ -95,3 +95,63 @@
 @media(max-width:600px){.composer-region{padding:28px 18px}.composer-intro{margin-bottom:24px}.composer-intro h1{font-size:34px}.composer-intro p{font-size:13px}.prompt-composer{padding:14px}.prompt-composer textarea{font-size:16px;min-height:150px}.composer-actions kbd{display:none}.composer-actions .primary{padding:9px 12px}.prompt-starters{gap:6px}.prompt-starters button{flex:1 0 45%;text-align:left}.prompt-starters button:last-child{flex-grow:0}.session-explainer{font-size:10px}.prompt-text{max-height:80px}.scores{font-size:11px}.scores th,.scores td{padding-inline:5px}.answer-identity h2{font-size:13px}.storage-warning{padding:10px 16px}.prompt-heading{gap:6px}.prompt-heading .reuse-prompt{font-size:10px}.composer-intro br:last-child{display:none}}
 .passage-text code{font-size:.9em;background:var(--raised);padding:1px 4px;border-radius:3px;box-decoration-break:clone}.passage-text strong{font-weight:600;color:var(--ink)}
 @media(max-width:600px){.workspace-foot>span:nth-child(2){display:none}.workspace-foot>span:first-child{overflow:hidden;text-overflow:ellipsis;min-width:0}.mobile-library{flex-shrink:0}}
+
+/* Personal scorecard: neutral outcome marks keep the accent reserved for actions. */
+.dialog:has(.scorecard){width:min(800px,calc(100vw - 32px));max-height:calc(100dvh - 40px)}
+.dialog[open]:has(.scorecard){display:flex;flex-direction:column}
+.dialog:has(.scorecard) :is(.dialog-heading,.dialog-footer){flex-shrink:0}
+.dialog:has(.scorecard) .library-content{max-height:none;min-height:0;overscroll-behavior:contain}
+.scorecard{--score-win:var(--ink);--score-tie:var(--muted);--score-loss:var(--raised);display:grid;gap:20px}
+.scorecard-summary{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 20px}
+.scorecard-kicker{display:flex;justify-content:space-between;gap:12px;color:var(--muted);font-size:10px;letter-spacing:.08em;text-transform:uppercase}
+.scorecard-kicker span:last-child{letter-spacing:.02em;text-transform:none}
+.scorecard-summary h3{font-size:27px;font-weight:550;letter-spacing:-.7px;line-height:1.25;margin-top:10px;overflow-wrap:anywhere;text-wrap:balance}
+.scorecard-summary>p{font-size:12px;color:var(--secondary);line-height:1.65;margin-top:7px;text-wrap:pretty}
+.scorecard-summary>.primary{margin-top:16px}
+.scorecard-summary>.primary svg{width:14px;margin-left:8px}
+.scorecard-totals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));margin:16px 0 0;padding-top:14px;border-top:1px solid var(--line)}
+.scorecard-totals>div+div{border-left:1px solid var(--line);padding-left:20px}
+.scorecard-totals dt{font-size:11px;color:var(--muted);letter-spacing:.015em;line-height:1.5}
+.scorecard-totals dd{font-size:23px;font-weight:500;font-variant-numeric:tabular-nums;margin:6px 0 0}
+.scorecard-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.scorecard-toolbar h3{font-size:13px;font-weight:550}
+.scorecard-filter{display:flex;align-items:center;gap:7px;font-size:11px;letter-spacing:.015em;color:var(--secondary);min-height:36px;cursor:pointer}
+.scorecard-filter input{width:15px;height:15px;margin:0;accent-color:var(--ink);cursor:pointer;flex-shrink:0}
+.scorecard-filter input:focus-visible{outline:2px solid var(--focus,var(--accent));outline-offset:3px}
+.scorecard-formula{font-size:11px;letter-spacing:.015em;color:var(--muted);line-height:1.6;margin:3px 0 15px}
+.scorecard-models{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.scorecard-model{border:1px solid var(--line);border-radius:8px;padding:16px;min-width:0}
+.scorecard-model header{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-height:24px}
+.scorecard-model h4{font-size:13px;font-weight:550;margin:0;overflow-wrap:anywhere}
+.scorecard-leader{display:inline-flex;align-items:center;gap:4px;margin-left:auto;font-size:10px;letter-spacing:.015em;color:var(--secondary);background:var(--raised);border-radius:4px;padding:4px 6px;white-space:nowrap}
+.scorecard-leader svg{width:12px;height:12px}
+.scorecard-rate{display:flex;align-items:baseline;gap:9px;margin-top:14px;font-variant-numeric:tabular-nums}
+.scorecard-rate strong{font-size:36px;line-height:1.1;letter-spacing:-1.5px;font-weight:500}
+.scorecard-rate>span{font-size:11px;letter-spacing:.015em;color:var(--muted)}
+.scorecard-sample{font-size:11px;letter-spacing:.015em;color:var(--muted);line-height:1.6;margin-top:7px}
+.scorecard-bar{height:9px;display:flex;overflow:hidden;border-radius:2px;background:var(--raised);margin:16px 0 12px;box-shadow:0 0 0 1px var(--line)}
+.scorecard-bar>span{height:100%;flex-shrink:0}
+.scorecard-wins{background:var(--score-win)}
+.scorecard-ties{background:var(--score-tie)}
+.scorecard-losses{background:repeating-linear-gradient(135deg,var(--score-loss),var(--score-loss) 2px,var(--line) 2px,var(--line) 4px)}
+.scorecard-outcomes{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:0}
+.scorecard-outcomes dt{display:flex;align-items:center;gap:5px;font-size:10px;letter-spacing:.02em;color:var(--muted);text-transform:capitalize}
+.scorecard-outcomes i{display:inline-block;width:7px;height:7px;border-radius:1px;box-shadow:0 0 0 1px var(--line)}
+.scorecard-outcomes dd{margin:6px 0 0;font-size:15px;font-variant-numeric:tabular-nums;font-weight:500}
+.scorecard-caption{font-size:10px;letter-spacing:.02em;color:var(--muted);line-height:1.6;margin-top:10px}
+.scorecard-context{display:flex;align-items:flex-start;gap:12px;padding-top:20px;border-top:1px solid var(--line)}
+.scorecard-context>svg{width:17px;height:17px;color:var(--muted);margin-top:1px}
+.scorecard-context>div{flex:1;min-width:0}
+.scorecard-context strong{font-size:12px;font-weight:500}
+.scorecard-context p{font-size:11px;letter-spacing:.015em;color:var(--muted);line-height:1.65;margin-top:6px;text-wrap:pretty}
+.scorecard-context button{flex-shrink:0;font-size:11px;min-height:40px}
+.scorecard-context button svg{width:13px;margin-left:4px}
+@media(max-width:600px){
+  .dialog:has(.scorecard){width:calc(100vw - 20px);max-height:calc(100dvh - 24px)}
+  .dialog:has(.scorecard) .library-content{padding:18px 16px}
+  .scorecard{gap:20px}.scorecard-summary{padding:16px}.scorecard-summary h3{font-size:23px}
+  .scorecard-totals{gap:10px}.scorecard-totals>div+div{padding-left:10px}.scorecard-totals dt{font-size:10px;min-height:30px}.scorecard-totals dd{font-size:21px}
+  .scorecard-toolbar{align-items:flex-start;flex-direction:column;gap:4px}.scorecard-filter{font-size:12px;min-height:40px}
+  .scorecard-models{grid-template-columns:1fr}.scorecard-model{padding:16px}.scorecard-rate{margin-top:14px}.scorecard-rate strong{font-size:36px}
+  .scorecard-context{flex-wrap:wrap}.scorecard-context button{margin-left:29px}.scorecard-context>div{flex-basis:calc(100% - 29px)}
+}
