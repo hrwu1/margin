@@ -2,7 +2,8 @@ import { examples, reasons, scoreDecisions } from '../directions/app.js';
 export { examples, reasons };
 export const STORAGE_KEY = 'margin-workspace-v1';
 const sides = ['A', 'B'];
-const empty = () => ({ marks: {}, quotes: {}, reason: null, note: '', vote: null, edited: false });
+const empty = () => ({ highlights: [], reason: null, note: '', vote: null, edited: false });
+export const highlightId = item => `${item.side}-${item.index}-${item.field}${item.field === 'passage' ? '' : `-${item.start}-${item.end}`}`;
 
 export function normalizeState(value) {
   const result = { sampleId: examples.some(e => e.id === value?.sampleId) ? value.sampleId : 'python', sessions: {} };
@@ -14,12 +15,31 @@ export function normalizeState(value) {
     }
     if (reasons.includes(source?.reason)) session.reason = source.reason;
     if (typeof source?.note === 'string') session.note = source.note.slice(0, 600);
-    for (const side of sides) {
-      const index = source?.marks?.[side];
-      if (!Number.isInteger(index) || index < 0 || index >= ex.answers[side].paragraphs.length) continue;
-      session.marks[side] = index;
+    // Existing saved passages/excerpts become highlights without changing their vote or notes.
+    const legacy = sides.flatMap(side => {
+      const index = source?.marks?.[side], p = ex.answers[side].paragraphs[index];
+      if (!Number.isInteger(index) || !p) return [];
       const quote = source?.quotes?.[side];
-      if (typeof quote === 'string' && quote.trim() && ex.answers[side].paragraphs[index].text.includes(quote)) session.quotes[side] = quote;
+      const start = typeof quote === 'string' && quote.trim() ? p.text.indexOf(quote) : -1;
+      return [{ side, index, field: start >= 0 ? 'text' : 'passage', start, end: start + (quote?.length || 0), quote }];
+    });
+    const seen = new Set();
+    for (const item of Array.isArray(source?.highlights) ? source.highlights : legacy) {
+      if (!item || !sides.includes(item.side) || !Number.isInteger(item.index) || item.index < 0) continue;
+      const p = ex.answers[item.side].paragraphs[item.index];
+      if (!p || !['passage', 'text', 'code'].includes(item.field)) continue;
+      const highlight = { side: item.side, index: item.index, field: item.field, note: typeof item.note === 'string' ? item.note.slice(0, 600) : '' };
+      if (item.field !== 'passage') {
+        const text = p[item.field];
+        if (typeof text !== 'string' || !Number.isInteger(item.start) || !Number.isInteger(item.end) || item.start < 0 || item.end <= item.start || item.end > text.length) continue;
+        const quote = text.slice(item.start, item.end);
+        if (!quote.trim() || quote !== item.quote) continue;
+        Object.assign(highlight, { start: item.start, end: item.end, quote });
+      }
+      const key = highlightId(highlight);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      session.highlights.push(highlight);
     }
     result.sessions[ex.id] = session;
   }
@@ -48,3 +68,15 @@ export function decisions(state) {
   return examples.filter(ex => state.sessions[ex.id].vote).map(ex => ({ sampleId: ex.id, ...state.sessions[ex.id] }));
 }
 export const scores = state => scoreDecisions(decisions(state));
+
+// Merge visual ranges only; overlapping highlights keep their own notes and remove actions.
+export function highlightRanges(highlights, side, index, field) {
+  const ranges = highlights.filter(item => item.side === side && item.index === index && item.field === field)
+    .map(({ start, end }) => ({ start, end })).sort((a, b) => a.start - b.start);
+  return ranges.reduce((merged, range) => {
+    const last = merged.at(-1);
+    if (last && range.start <= last.end) last.end = Math.max(last.end, range.end);
+    else merged.push(range);
+    return merged;
+  }, []);
+}

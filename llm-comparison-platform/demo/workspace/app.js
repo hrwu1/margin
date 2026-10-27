@@ -1,5 +1,5 @@
 // Keep the editor paired with the revised state contract in cached static previews.
-import { examples, reasons, STORAGE_KEY, normalizeState, readState, updateSession, castVote, decisions, scores } from './model.js?v=editable-votes';
+import { examples, reasons, STORAGE_KEY, normalizeState, readState, updateSession, castVote, decisions, scores, highlightId, highlightRanges } from './model.js?v=highlights';
 import { createFeedback } from '../bold/feedback.js';
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -47,17 +47,17 @@ $('#workspace-app').innerHTML = `<div class="app-shell">
     <div class="sidebar-bottom"><div class="session-label">${icon('lock')}<span>Anonymous session</span></div>${button('settings', `${icon('settings')}<span>Interaction settings</span>`, 'title="Interaction settings"', 'nav-button')}</div>
   </aside>
   <main class="workspace" id="main">
-    <header class="topbar"><div class="breadcrumb"><span>Comparisons</span><span class="slash">/</span><strong id="category"></strong></div><span class="mobile-brand">margin</span><select class="mobile-picker" aria-label="Example comparison">${examples.map(ex => `<option value="${ex.id}">${escape(ex.category)}</option>`).join('')}</select><div class="header-tools"><span class="demo-label">Interactive demo</span>${button('theme', '', 'id="theme-toggle"', 'icon-button theme-toggle')}${button('drawer', `${icon('panel')} Evidence <span class="evidence-count">0</span>`, 'id="evidence-toggle" aria-expanded="false" aria-controls="evidence-drawer"', 'evidence-toggle')}</div></header>
+    <header class="topbar"><div class="breadcrumb"><span>Comparisons</span><span class="slash">/</span><strong id="category"></strong></div><span class="mobile-brand">margin</span><select class="mobile-picker" aria-label="Example comparison">${examples.map(ex => `<option value="${ex.id}">${escape(ex.category)}</option>`).join('')}</select><div class="header-tools"><span class="demo-label">Interactive demo</span>${button('theme', '', 'id="theme-toggle"', 'icon-button theme-toggle')}${button('drawer', `${icon('panel')} Highlights <span class="evidence-count">0</span>`, 'id="evidence-toggle" aria-expanded="false" aria-controls="evidence-drawer"', 'evidence-toggle')}</div></header>
     <p class="storage-warning" role="alert" hidden></p>
     <section class="prompt-region" aria-label="Shared prompt"></section>
     <div class="workspace-body">
       <section class="comparison" aria-label="Compare answers">
-        <div class="reading-status"><span id="identity-status"></span><span class="selection-hint">Select text to keep an excerpt</span></div>
+        <div class="reading-status"><span id="identity-status"></span><span class="selection-hint">Select text or use Highlight · Optional</span></div>
         <div class="mobile-answer-tabs" aria-label="Visible answer">${sides.map(side => button('tab', `Answer ${side}`, `data-side="${side}" aria-pressed="${side === 'A'}"`, '')).join('')}</div>
         <div id="answers" class="answers" tabindex="-1"></div>
         <section class="decision-dock" aria-label="Your decision"></section>
       </section>
-      <div class="drawer-slot"><aside class="evidence-drawer" id="evidence-drawer" aria-labelledby="evidence-title" aria-hidden="true" inert><header class="drawer-header"><h2 id="evidence-title" tabindex="-1">${icon('quote')} Evidence</h2>${button('close-drawer', icon('close'), 'aria-label="Close evidence"')}</header><div class="drawer-scroll"></div><div class="drawer-return">${button('close-drawer', 'Back to comparison', '', 'quiet-button')}</div></aside></div>
+      <div class="drawer-slot"><aside class="evidence-drawer" id="evidence-drawer" aria-labelledby="evidence-title" aria-hidden="true" inert><header class="drawer-header"><h2 id="evidence-title" tabindex="-1">${icon('quote')} Highlights <small>Optional</small></h2>${button('close-drawer', icon('close'), 'aria-label="Close highlights"')}</header><div class="drawer-scroll"></div><div class="drawer-return">${button('close-drawer', 'Back to comparison', '', 'quiet-button')}</div></aside></div>
     </div>
     <footer class="workspace-foot"><span>Static examples · fictional models</span><span id="save-status"></span><div class="mobile-library">${button('notebook', 'Notebook', '', '')} · ${button('scores', 'Scores', '', '')} · ${button('settings', 'Settings', '', '')}</div></footer>
     <div class="drawer-backdrop" aria-hidden="true"></div>
@@ -112,8 +112,8 @@ function renderSample() {
   feel.cancel();
   hideSelection();
   $('.prompt-region').innerHTML = `<div class="prompt-heading"><h1>Shared prompt</h1><span class="prompt-tag">Same question. Two perspectives.</span></div><p class="prompt-text">${escape(ex.question)}</p>${ex.snippet ? `<details class="source-code"><summary>View original code</summary><pre><code>${escape(ex.snippet)}</code></pre></details>` : ''}`;
-  $('#answers').innerHTML = sides.map(side => `<article class="answer-panel" data-side="${side}" aria-labelledby="answer-${side}-title"><header class="answer-header"></header><div class="answer-scroll">${ex.answers[side].paragraphs.map((p, index) => `<section class="passage" data-side="${side}" data-index="${index}" id="passage-${side}-${index}" tabindex="-1"><div class="passage-heading"><span class="passage-index" aria-hidden="true">${String(index + 1).padStart(2, '0')}</span><h3>${escape(p.title)}</h3>${button('keep', '', `data-side="${side}" data-index="${index}"`, 'keep-button')}</div><p class="passage-text">${escape(p.text)}</p>${p.code ? `<pre><code>${escape(p.code)}</code></pre>` : ''}</section>`).join('')}<div class="answer-ending"><span>End of answer</span><i></i></div></div></article>`).join('');
-  syncHeaders(); syncPassages(); renderDock(); renderEvidence(); syncNavigation(); syncSaveStatus(); syncMobile();
+  $('#answers').innerHTML = sides.map(side => `<article class="answer-panel" data-side="${side}" aria-labelledby="answer-${side}-title"><header class="answer-header"></header><div class="answer-scroll">${ex.answers[side].paragraphs.map((p, index) => `<section class="passage" data-side="${side}" data-index="${index}" id="passage-${side}-${index}" tabindex="-1"><div class="passage-heading"><span class="passage-index" aria-hidden="true">${String(index + 1).padStart(2, '0')}</span><h3>${escape(p.title)}</h3>${button('keep', '', `data-side="${side}" data-index="${index}"`, 'keep-button')}</div><p class="passage-text">${escape(p.text)}</p>${p.code ? `<pre><code class="passage-code">${escape(p.code)}</code></pre>` : ''}</section>`).join('')}<div class="answer-ending"><span>End of answer</span><i></i></div></div></article>`).join('');
+  syncHeaders(); syncPassages(); renderDock(); renderHighlights(); syncNavigation(); syncSaveStatus(); syncMobile();
 }
 function syncHeaders() {
   const saved = session().vote;
@@ -123,39 +123,48 @@ function syncHeaders() {
     $('.answer-header', panel).innerHTML = `<span class="letter">${side}</span><div class="answer-identity"><h2 id="answer-${side}-title">${saved ? sample().answers[side].model : `Answer ${side}`}</h2><small>${saved ? 'Fictional sample model' : 'Read without the label'}</small></div><span class="identity-icon">${icon(saved ? 'check' : 'lock')} ${saved ? saved === side ? 'Your choice' : saved === 'tie' ? 'Tied' : 'Revealed' : 'Anonymous'}</span>`;
   });
   $('#identity-status').innerHTML = `${icon(saved ? 'check' : 'lock')} ${saved ? 'Decision saved. Models revealed.' : 'Identities hidden until your vote'}`;
-  $('.selection-hint').textContent = saved ? 'Your evidence stays with your decision' : 'Select text to keep an excerpt';
+  $('.selection-hint').textContent = saved ? 'Your highlights explain your choice' : 'Select text or use Highlight · Optional';
 }
 function syncPassages() {
   const current = session();
   $$('.passage').forEach(node => {
-    const { side, index } = node.dataset, marked = current.marks[side] === Number(index);
-    node.classList.toggle('marked', marked);
+    const { side } = node.dataset, index = Number(node.dataset.index);
+    const highlights = current.highlights.filter(item => item.side === side && item.index === index);
+    const whole = highlights.some(item => item.field === 'passage');
+    node.classList.toggle('marked', highlights.length > 0);
     const keep = $('.keep-button', node);
     keep.disabled = !!current.vote;
-    keep.setAttribute('aria-pressed', marked);
-    const label = `${current.vote ? marked ? 'Kept' : 'Unkept' : marked ? 'Remove' : 'Keep'} passage ${Number(index) + 1} from answer ${side}`;
+    keep.setAttribute('aria-pressed', whole);
+    const label = `${current.vote ? whole ? 'Highlighted' : 'Unhighlighted' : whole ? 'Remove highlight from' : 'Highlight'} paragraph ${index + 1} from answer ${side}`;
     keep.setAttribute('aria-label', label); keep.title = label;
-    keep.innerHTML = icon(marked ? 'check' : 'plus');
-    const text = sample().answers[side].paragraphs[index].text, quote = marked && current.quotes[side];
-    const offset = quote ? text.indexOf(quote) : -1;
-    $('.passage-text', node).innerHTML = offset >= 0 ? `${escape(text.slice(0, offset))}<mark>${escape(quote)}</mark>${escape(text.slice(offset + quote.length))}` : escape(text);
+    keep.innerHTML = `${icon(whole ? 'check' : 'plus')}<span>${whole ? 'Highlighted' : 'Highlight'}</span>`;
+    for (const field of ['text', 'code']) {
+      const target = $(`.passage-${field}`, node), text = sample().answers[side].paragraphs[index][field];
+      if (!target) continue;
+      let cursor = 0, html = '';
+      for (const range of highlightRanges(highlights, side, index, field)) {
+        html += `${escape(text.slice(cursor, range.start))}<mark>${escape(text.slice(range.start, range.end))}</mark>`;
+        cursor = range.end;
+      }
+      target.innerHTML = html + escape(text.slice(cursor));
+    }
   });
-  $('.evidence-count').textContent = Object.keys(current.marks).length;
+  $('.evidence-count').textContent = current.highlights.length;
 }
-function renderEvidence() {
-  const current = session(), kept = sides.filter(side => Number.isInteger(current.marks[side]));
-  $('.drawer-scroll').innerHTML = `<p class="drawer-intro">${current.vote ? 'The evidence behind your decision. Saved with the exact words you kept.' : 'Keep one passage from each answer, or select the exact words that matter.'}</p><div class="evidence-list">${kept.length ? kept.map(side => {
-    const p = sample().answers[side].paragraphs[current.marks[side]];
-    return `<article class="evidence-card" data-side="${side}"><header><span>Answer ${side} · passage ${current.marks[side] + 1}</span>${current.vote ? icon('lock') : button('remove', icon('close'), `data-side="${side}" aria-label="Remove evidence from answer ${side}"`)}</header><blockquote>${escape(current.quotes[side] || p.text)}${!current.quotes[side] && p.code ? `<pre><code>${escape(p.code)}</code></pre>` : ''}</blockquote>${button('jump', `Back to passage ${icon('arrow')}`, `data-side="${side}"`, 'show-passage')}</article>`;
-  }).join('') : `<div class="empty-evidence">${icon('quote')}<strong>Keep what changes your mind.</strong><p>Use the + beside a passage, or select a sentence. It will stay here while you compare.</p></div>`}</div><div class="reason-section"><fieldset><legend>What mattered? <span>Optional</span></legend><div class="reasons">${reasons.map(reason => button('reason', escape(reason), `data-reason="${escape(reason)}" aria-pressed="${current.reason === reason}" ${current.vote ? 'disabled' : ''}`, '')).join('')}</div></fieldset><label for="decision-note" class="note-label">Your reasoning <span>Optional</span></label><textarea id="decision-note" maxlength="600" rows="4" placeholder="What made the difference?" ${current.vote ? 'readonly' : ''}>${escape(current.note)}</textarea><p class="note-status">${current.vote ? 'Saved with your decision' : 'Saves as you write'} · ${current.note.length}/600</p></div><div class="drawer-end">${icon(current.vote ? 'lock' : 'info')}<p>${current.vote ? 'Your saved evidence and reasoning stay attached when you change your vote.' : 'Your evidence and reasoning will be saved with your vote.'}</p></div>`;
+function renderHighlights() {
+  const current = session();
+  $('.drawer-scroll').innerHTML = `<p class="drawer-intro">${current.vote ? 'Highlights help you revisit the details behind a decision.' : 'Save the useful details or mistakes behind your choice.'}</p><div class="evidence-list">${current.highlights.length ? current.highlights.map(item => {
+    const p = sample().answers[item.side].paragraphs[item.index], key = highlightId(item);
+    return `<article class="evidence-card" data-highlight="${key}"><header><span>Answer ${item.side} · paragraph ${item.index + 1}${item.field === 'passage' ? '' : ' · excerpt'}</span>${current.vote ? icon('lock') : button('remove', icon('close'), `data-highlight="${key}" aria-label="Remove highlight from answer ${item.side}, paragraph ${item.index + 1}: ${escape((item.quote || p.text).slice(0, 35))}"`)}</header><blockquote>${item.field === 'code' ? `<pre><code>${escape(item.quote)}</code></pre>` : escape(item.quote || p.text)}${item.field === 'passage' && p.code ? `<pre><code>${escape(p.code)}</code></pre>` : ''}</blockquote>${current.vote ? item.note ? `<div class="highlight-note saved-highlight-note"><span>Your note</span><p>${escape(item.note)}</p></div>` : '' : `<div class="highlight-note"><label for="note-${key}">Why this matters <span>Optional</span></label><textarea id="note-${key}" data-highlight="${key}" aria-label="Note for answer ${item.side}, paragraph ${item.index + 1}: ${escape((item.quote || p.text).slice(0, 35))}" rows="2" maxlength="600" placeholder="A useful detail, a mistake, or what stood out…">${escape(item.note)}</textarea><span class="highlight-note-status">${storageError ? 'This visit only' : item.note ? 'Saved on this device' : 'Saves as you type'}</span></div>`}${button('jump', `Show in answer ${icon('arrow')}`, `data-side="${item.side}" data-index="${item.index}" data-highlight="${key}"`, 'show-passage')}</article>`;
+  }).join('') : current.vote ? `<div class="empty-evidence">${icon('quote')}<strong>No highlights saved.</strong><p>You voted without highlights. They are optional.</p></div>` : `<div class="empty-evidence">${icon('quote')}<strong>What stands out to you?</strong><p>Select words in an answer or code block, then choose <b>Highlight selection</b>. Use <b>Highlight</b> beside a heading to save the whole paragraph.</p>${button('start-highlighting', 'Try highlighting a paragraph', '', 'quiet-button')}</div>`}</div><p class="highlight-help">${current.vote ? 'Highlights and notes stay as they were when you voted. You can still change your vote.' : 'Keep multiple highlights from either answer, with a note for each. You can also vote without highlights.'}</p><div class="reason-section"><fieldset><legend>What mattered overall? <span>Optional</span></legend><div class="reasons">${reasons.map(reason => button('reason', escape(reason), `data-reason="${escape(reason)}" aria-pressed="${current.reason === reason}" ${current.vote ? 'disabled' : ''}`, '')).join('')}</div></fieldset><label for="decision-note" class="note-label">Your overall reasoning <span>Optional</span></label><textarea id="decision-note" maxlength="600" rows="4" placeholder="Why would you choose one answer over the other?" ${current.vote ? 'readonly' : ''}>${escape(current.note)}</textarea><p class="note-status">${current.vote ? 'Saved with your vote' : 'Saves as you type'} · ${current.note.length}/600</p></div><div class="drawer-end">${icon(current.vote ? 'lock' : 'info')}<p>${current.vote ? 'Your vote can change. Your original highlights and notes stay saved.' : 'Highlights and notes become read-only when you vote. You can still change your vote.'}</p></div>`;
 }
 function renderDock() {
   const current = session(), completed = decisions(state).length;
   if (current.vote && !editingVote) {
-    $('.decision-dock').innerHTML = `<div class="saved-decision" tabindex="-1"><span class="saved-icon">${icon('check')}</span><div><strong>${current.vote === 'tie' ? 'You called it a tie.' : `You chose ${sample().answers[current.vote].model}.`}</strong><p>${current.reason ? `${escape(current.reason)} · ` : ''}Saved in your notebook with ${Object.keys(current.marks).length} kept ${Object.keys(current.marks).length === 1 ? 'passage' : 'passages'}.${current.edited ? '<span class="edited-label">Edited after reveal</span>' : ''}</p></div></div><div class="dock-actions">${button('change-vote', 'Change vote', '', 'quiet-button')}${button(completed < examples.length ? 'next' : 'notebook', `${completed < examples.length ? 'Next comparison' : 'View notebook'} ${icon('arrow')}`, '', 'primary')}</div>`;
+    $('.decision-dock').innerHTML = `<div class="saved-decision" tabindex="-1"><span class="saved-icon">${icon('check')}</span><div><strong>${current.vote === 'tie' ? 'You called it a tie.' : `You chose ${sample().answers[current.vote].model}.`}</strong><p>${current.reason ? `${escape(current.reason)} · ` : ''}Saved in your notebook with ${current.highlights.length} ${current.highlights.length === 1 ? 'highlight' : 'highlights'}.${current.edited ? '<span class="edited-label">Edited after reveal</span>' : ''}</p></div></div><div class="dock-actions">${button('change-vote', 'Change vote', '', 'quiet-button')}${button(completed < examples.length ? 'next' : 'notebook', `${completed < examples.length ? 'Next comparison' : 'View notebook'} ${icon('arrow')}`, '', 'primary')}</div>`;
     return;
   }
-  $('.decision-dock').innerHTML = `<div class="decision-copy"><strong>${editingVote ? 'Change your vote' : 'Which answer would you use?'}</strong>${editingVote ? button('cancel-vote', 'Cancel', '', 'quiet-button cancel-vote') : '<span>Vote to reveal the models</span>'}</div><div class="votes">${['A', 'tie', 'B'].map(choice => button('vote', choice === 'tie' ? 'It’s a tie' : `<span>${choice}</span> Answer ${choice}`, `data-vote="${choice}" ${editingVote ? `aria-pressed="${current.vote === choice}"` : ''}`, `vote-button${choice === 'tie' ? ' tie' : ''}`)).join('')}</div>`;
+  $('.decision-dock').innerHTML = `<div class="decision-copy"><strong>${editingVote ? 'Change your vote' : 'Which answer would you use?'}</strong>${editingVote ? button('cancel-vote', 'Cancel', '', 'quiet-button cancel-vote') : '<span>Vote to reveal · Highlights optional</span>'}</div><div class="votes">${['A', 'tie', 'B'].map(choice => button('vote', choice === 'tie' ? 'It’s a tie' : `<span>${choice}</span> Answer ${choice}`, `data-vote="${choice}" ${editingVote ? `aria-pressed="${current.vote === choice}"` : ''}`, `vote-button${choice === 'tie' ? ' tie' : ''}`)).join('')}</div>`;
 }
 function setVoteEditing(editing) {
   if (!session().vote) return;
@@ -187,31 +196,46 @@ function setDrawer(open, focus = false) {
   }
   hideSelection();
 }
-function keep(side, index, quote = null) {
+function keep(item) {
   if (session().vote) return;
-  const marks = { ...session().marks }, quotes = { ...session().quotes };
-  const removing = !quote && marks[side] === index;
-  if (removing) { delete marks[side]; delete quotes[side]; }
-  else { marks[side] = index; if (quote) quotes[side] = quote; else delete quotes[side]; }
-  state = updateSession(state, state.sampleId, { marks, quotes }); persist();
-  syncPassages(); renderEvidence();
-  if (!removing) {
-    setDrawer(true);
-    feel.animate($(`.evidence-card[data-side="${side}"]`), [{ transform: 'translateY(12px)', opacity: .3 }, { transform: 'none', opacity: 1 }], { duration: 200 });
-    feel.haptic('keep');
+  const key = highlightId(item);
+  if (session().highlights.some(highlight => highlightId(highlight) === key)) {
+    if (item.field === 'passage') removeHighlight(key);
+    else toast('This excerpt is already highlighted.');
+    return;
   }
-  toast(removing ? `Evidence removed from answer ${side}` : `${quote ? 'Excerpt' : 'Passage'} kept from answer ${side}`);
+  state = updateSession(state, state.sampleId, { highlights: [...session().highlights, item] }); persist();
+  syncPassages(); renderHighlights(); setDrawer(true);
+  const card = $(`.evidence-card[data-highlight="${key}"]`);
+  if (card) {
+    // Scroll the drawer only, leaving the two answer panes at their reading positions.
+    $('.drawer-scroll').scrollTo({ top: card.offsetTop - $('.drawer-scroll').offsetTop - 12, behavior: feel.motion ? 'smooth' : 'instant' });
+    feel.animate(card, [{ transform: 'translateY(12px)', opacity: .3 }, { transform: 'none', opacity: 1 }], { duration: 200 });
+  }
+  feel.haptic('keep');
+  toast('Highlight added. You can add a note in Highlights.');
+}
+function removeHighlight(key) {
+  if (session().vote) return;
+  const fromDrawer = $('#evidence-drawer').contains(document.activeElement);
+  const highlights = session().highlights, index = highlights.findIndex(item => highlightId(item) === key);
+  if (index < 0) return;
+  const nearby = highlights[index + 1] || highlights[index - 1];
+  state = updateSession(state, state.sampleId, { highlights: highlights.filter(item => highlightId(item) !== key) }); persist();
+  syncPassages(); renderHighlights();
+  if (fromDrawer) (nearby ? $(`.evidence-card[data-highlight="${highlightId(nearby)}"] [data-action="remove"]`) : $('#evidence-title')).focus({ preventScroll: true });
+  toast('Highlight removed. Your other highlights are unchanged.');
 }
 function vote(choice) {
   const previous = session().vote;
   if (previous && !editingVote) return;
   state = castVote(state, state.sampleId, choice); editingVote = false;
   persist(); hideSelection();
-  syncHeaders(); syncPassages(); renderEvidence(); renderDock(); syncNavigation();
+  syncHeaders(); syncPassages(); renderHighlights(); renderDock(); syncNavigation();
   if (!previous) sides.forEach((side, index) => feel.animate($(`.answer-panel[data-side="${side}"] .answer-identity`), [{ transform: 'translateY(6px)', opacity: .2 }, { transform: 'none', opacity: 1 }], { duration: 240, delay: index * 40 }));
   $('.saved-decision').focus({ preventScroll: true });
   if (choice !== previous) feel.haptic('vote');
-  toast(previous ? choice === previous ? 'Vote unchanged.' : 'Vote updated. Your notes and evidence are preserved.' : 'Decision saved. Model identities revealed.');
+  toast(previous ? choice === previous ? 'Vote unchanged.' : 'Vote updated. Your highlights and notes are preserved.' : 'Decision saved. Model identities revealed.');
 }
 function changeSample(id) {
   if (!examples.some(ex => ex.id === id)) return;
@@ -222,7 +246,7 @@ function changeSample(id) {
 function openLibrary(page) {
   const rows = decisions(state);
   $('#library-title').textContent = page === 'scores' ? 'Your scorecard' : 'Your notebook';
-  $('.library-content').innerHTML = page === 'scores' ? `<p class="library-intro">A record of your choices across these three examples. Model names are fictional; this is your session, not a public ranking. Scores reflect your latest votes.</p><table class="scores"><caption>${rows.length} of ${examples.length} comparisons completed</caption><thead><tr><th scope="col">Model</th><th scope="col">Wins</th><th scope="col">Ties</th><th scope="col">Losses</th></tr></thead><tbody>${Object.entries(scores(state)).map(([model, score]) => `<tr><th scope="row">${model}</th><td>${score.wins}</td><td>${score.ties}</td><td>${score.losses}</td></tr>`).join('')}</tbody></table>` : rows.length ? `<p class="library-intro">Your decisions, with the reasoning attached. Reopen any comparison to see the original evidence.</p>${rows.map(row => { const ex = examples.find(e => e.id === row.sampleId); return button('revisit', `<span>${escape(ex.title)}<small>${row.vote === 'tie' ? 'Tie' : `${ex.answers[row.vote].model} preferred`} · ${Object.keys(row.marks).length} ${Object.keys(row.marks).length === 1 ? 'passage' : 'passages'} kept${row.reason ? ` · ${escape(row.reason)}` : ''}${row.edited ? '<br>Edited after reveal' : ''}${row.note ? `<br>${escape(row.note)}` : ''}</small></span>${icon('arrow')}`, `data-sample="${ex.id}"`, 'history-item'); }).join('')}` : `<div class="empty-library"><h3>Your first decision starts here.</h3><p>Compare the answers, keep a useful passage, and vote. The reasoning will be here when you come back.</p>${button('close-dialog', 'Back to comparison', '', 'quiet-button')}</div>`;
+  $('.library-content').innerHTML = page === 'scores' ? `<p class="library-intro">A record of your choices across these three examples. Model names are fictional; this is your session, not a public ranking. Scores reflect your latest votes.</p><table class="scores"><caption>${rows.length} of ${examples.length} comparisons completed</caption><thead><tr><th scope="col">Model</th><th scope="col">Wins</th><th scope="col">Ties</th><th scope="col">Losses</th></tr></thead><tbody>${Object.entries(scores(state)).map(([model, score]) => `<tr><th scope="row">${model}</th><td>${score.wins}</td><td>${score.ties}</td><td>${score.losses}</td></tr>`).join('')}</tbody></table>` : rows.length ? `<p class="library-intro">Your decisions, with the reasoning attached. Reopen a comparison to see its highlights and notes.</p>${rows.map(row => { const ex = examples.find(e => e.id === row.sampleId); return button('revisit', `<span>${escape(ex.title)}<small>${row.vote === 'tie' ? 'Tie' : `${ex.answers[row.vote].model} preferred`} · ${row.highlights.length} ${row.highlights.length === 1 ? 'highlight' : 'highlights'}${row.reason ? ` · ${escape(row.reason)}` : ''}${row.edited ? '<br>Edited after reveal' : ''}${row.note ? `<br>${escape(row.note)}` : ''}</small></span>${icon('arrow')}`, `data-sample="${ex.id}"`, 'history-item'); }).join('')}` : `<div class="empty-library"><h3>Your first decision starts here.</h3><p>Compare the answers, optionally highlight useful details or mistakes, and vote. The reasoning will be here when you come back.</p>${button('close-dialog', 'Back to comparison', '', 'quiet-button')}</div>`;
   openDialog($('#library'));
 }
 function openDialog(dialog) {
@@ -244,11 +268,14 @@ function inspectSelection() {
   const selected = window.getSelection();
   if (!selected?.rangeCount || selected.isCollapsed) return hideSelection();
   const element = node => node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
-  const start = element(selected.anchorNode)?.closest('.passage-text'), end = element(selected.focusNode)?.closest('.passage-text');
-  const quote = selected.toString().trim();
-  if (!start || start !== end || quote.length < 3 || !start.textContent.includes(quote)) return hideSelection();
-  const passage = start.closest('.passage'), rect = selected.getRangeAt(0).getBoundingClientRect();
-  selection = { side: passage.dataset.side, index: Number(passage.dataset.index), quote };
+  const range = selected.getRangeAt(0);
+  const start = element(range.startContainer)?.closest('.passage-text, .passage-code'), end = element(range.endContainer)?.closest('.passage-text, .passage-code');
+  const raw = range.toString(), quote = raw.trim();
+  if (!start || start !== end || !quote) return hideSelection();
+  const before = range.cloneRange(); before.selectNodeContents(start); before.setEnd(range.startContainer, range.startOffset);
+  const offset = before.toString().length + raw.length - raw.trimStart().length;
+  const passage = start.closest('.passage'), rect = range.getBoundingClientRect();
+  selection = { side: passage.dataset.side, index: Number(passage.dataset.index), field: start.matches('.passage-code') ? 'code' : 'text', start: offset, end: offset + quote.length, quote };
   const tools = $('#selection-tools'); tools.hidden = false;
   tools.style.left = `${Math.min(Math.max(rect.left, 8), innerWidth - tools.offsetWidth - 8)}px`;
   tools.style.top = `${Math.max(8, Math.min(rect.bottom + 8, innerHeight - 140))}px`;
@@ -261,10 +288,11 @@ $('#workspace-app').addEventListener('click', event => {
   if (action === 'theme') toggleTheme();
   if (action === 'drawer') setDrawer(!drawerOpen, true);
   if (action === 'close-drawer') setDrawer(false);
-  if (action === 'keep') keep(side, Number(index));
-  if (action === 'remove') {
-    keep(side, session().marks[side]);
-    $('#evidence-title').focus({ preventScroll: true });
+  if (action === 'keep') keep({ side, index: Number(index), field: 'passage' });
+  if (action === 'remove') removeHighlight(target.dataset.highlight);
+  if (action === 'start-highlighting') {
+    setDrawer(false);
+    $(`.answer-panel[data-side="${mobileSide}"] .keep-button`).focus({ preventScroll: true });
   }
   if (action === 'reason' && !session().vote) {
     state = updateSession(state, state.sampleId, { reason: session().reason === target.dataset.reason ? null : target.dataset.reason }); persist();
@@ -283,31 +311,37 @@ $('#workspace-app').addEventListener('click', event => {
   if (action === 'compare') { setDrawer(false); $('#answers').focus(); }
   if (action === 'revisit') {
     $('#library').close(); changeSample(target.dataset.sample);
-    const keptSide = sides.find(value => Number.isInteger(session().marks[value]));
-    if (keptSide) mobileSide = keptSide;
+    const first = session().highlights[0];
+    if (first) mobileSide = first.side;
     syncMobile(); if (!compact.matches) setDrawer(true);
-    const destination = keptSide ? $(`#passage-${keptSide}-${session().marks[keptSide]}`) : $('#answers');
+    const destination = first ? $(`#passage-${first.side}-${first.index}`) : $('#answers');
     destination.focus({ preventScroll: true }); destination.scrollIntoView({ block: 'center' });
   }
   if (action === 'jump') {
     mobileSide = side; syncMobile(); if (compact.matches) setDrawer(false);
-    const passage = $(`#passage-${side}-${session().marks[side]}`);
+    const passage = $(`#passage-${side}-${index}`);
     passage.focus({ preventScroll: true }); passage.scrollIntoView({ block: 'center', behavior: feel.motion ? 'smooth' : 'instant' });
     feel.animate(passage, [{ opacity: .45 }, { opacity: 1 }], { duration: 320 });
   }
 });
 $('#workspace-app').addEventListener('input', event => {
-  if (event.target.id !== 'decision-note' || session().vote) return;
-  state = updateSession(state, state.sampleId, { note: event.target.value }); persist();
-  $('.note-status').textContent = `${storageError ? 'This visit only' : 'Saved on this device'} · ${session().note.length}/600`;
+  if (session().vote) return;
+  if (event.target.matches('textarea[data-highlight]')) {
+    const key = event.target.dataset.highlight;
+    state = updateSession(state, state.sampleId, { highlights: session().highlights.map(item => highlightId(item) === key ? { ...item, note: event.target.value } : item) }); persist();
+    $('.highlight-note-status', event.target.parentElement).textContent = storageError ? 'This visit only' : 'Saved on this device';
+  } else if (event.target.id === 'decision-note') {
+    state = updateSession(state, state.sampleId, { note: event.target.value }); persist();
+    $('.note-status').textContent = `${storageError ? 'This visit only' : 'Saved on this device'} · ${session().note.length}/600`;
+  }
 });
 $('.mobile-picker').addEventListener('change', event => changeSample(event.target.value));
 $('.drawer-backdrop').addEventListener('click', () => setDrawer(false));
 $('#keep-selection').addEventListener('pointerdown', event => event.preventDefault());
 $('#keep-selection').addEventListener('click', () => {
   if (!selection) return;
-  const { side, index, quote } = selection;
-  window.getSelection()?.removeAllRanges(); keep(side, index, quote); hideSelection();
+  const item = selection, { side, index } = item;
+  window.getSelection()?.removeAllRanges(); keep(item); hideSelection();
   if (!compact.matches) $(`#passage-${side}-${index} .keep-button`).focus({ preventScroll: true });
 });
 document.addEventListener('pointerup', event => { if (!event.target.closest('#selection-tools')) inspectSelection(); });
