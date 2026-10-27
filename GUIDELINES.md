@@ -28,13 +28,15 @@ Goal: let users choose exactly two distinct GPT text-generation models available
 - [x] Add labelled, keyboard-accessible selectors, loading/error/retry states, and responsive styling; preserve offline fixtures.
 - [x] Update the README; verify automated checks, desktop/mobile interaction, and a bounded live comparison with inexpensive models.
 - [x] Integrate the concurrently added question-list workflow: freeze the chosen model pair for every queued question, preserve it across reload/retry, and keep older saved lists recoverable.
-- [ ] Commit tested steps, merge cleanly into the original checkout, and remove the temporary worktree.
+- [x] Commit tested steps, merge cleanly into the original checkout, and remove the temporary worktree.
 
 Design reference lock: the existing Margin composer owns typography, light/dark surface colors, spacing, borders, and accent roles. Use native selects with visible labels and focus states, following Refero's bundled craft guidance for forms. Keep the pair controls together above the prompt; selection order must not imply answer A/B. No new imagery or dependencies. Live Refero references were unavailable because the subscription was inactive.
 
 Completion requires model discovery and selection to drive actual generation, safe failures without fallback, persistent model identities and scores, passing regression checks, and documented live-test limits. Use only temporary verification databases; preserve the user's existing data and local configuration.
 
 Verification: 67 backend tests, 21 frontend tests, TypeScript checking, and the production build pass. The live catalog returned 72 GPT text entries. Short generations succeeded with GPT-4o Mini, GPT-5.4 nano, and GPT-6 Luna; a two-question live list retained the chosen GPT-4o Mini/GPT-6 Luna pair through both comparisons, voting, and reload. Browser checks covered desktop, 390px and 320px layouts, both themes, keyboard focus, duplicate prevention, model-list failure/recovery, anonymous answers, reveal, and scores. OpenAI returned model-unavailable errors for the listed legacy GPT-3.5 models; these errors stayed explicit without fallback or paid retries. Other models were not live-tested. Temporary databases isolated all verification from existing user data. The upstream Starlette/httpx deprecation warning remains.
+
+Integration: the completed work was fast-forwarded into main after preserving concurrent question-list and motion updates. The production frontend was rebuilt, the idle local backend was restarted on its existing port and database, and the served selectors were verified. The temporary verification server and worktree were removed. No push was performed.
 
 ## Public repository preparation
 
