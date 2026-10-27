@@ -57,3 +57,20 @@ Queue verification: eight focused scheduler tests cover five-item order, overlap
 UI verification: 17 frontend tests, 32 backend tests, TypeScript, and the production build pass. Desktop/mobile browser checks and injected network/save/delayed-read failures pass. Two live five-question runs produced 20 successful responses for an estimated $0.0024263 total. Final generation time was 13.87 seconds, with 0.06–0.37 second inter-pair gaps. Detailed evidence and pricing sources are recorded in DESIGN_NOTES.md.
 
 Integration: the tested commits were fast-forward merged into the original checkout, its frontend was rebuilt, and the temporary worktree and test servers were removed. No push was performed.
+
+## CSV question import
+
+Goal: import a local CSV into the existing editable question list without retyping, changing scheduling, or sending extra file columns to a model.
+
+The preceding question-list implementation was audited and pushed to GitHub main at a5b1bb6. The audit checked all reachable file history, private paths/artifacts, credential patterns, and exact local secret matches without printing secret values.
+
+Design reference: keep the current question-list form and its inline paste preview. Adapt bundled Refero guidance for explicit file/column labels, keyboard focus, inline errors, and preserving drafts. Reuse existing neutral surfaces and button roles; no new visual system or dependencies.
+
+- [ ] Parse UTF-8 comma-separated CSV locally, including BOM, CRLF, quoted commas, escaped quotes, and multiline cells. Reject malformed or oversized files clearly.
+- [ ] Detect question/prompt headers; support headerless single-column files and explicit column/header selection for other layouts.
+- [ ] Preview selected questions, show blank-row handling and queue limits, and append only after the user chooses Add questions. Preserve existing draft text and multiline content.
+- [ ] Keep file contents in the browser until imported questions are explicitly compared. Extra columns never enter the question queue.
+- [ ] Test parsing, validation, import cancellation/replacement, mobile/keyboard behavior, and the complete CSV-to-comparison flow with offline models. No additional paid calls are needed.
+- [ ] Commit tested steps, merge cleanly, rebuild the local app, and remove the temporary worktree.
+
+Completion: valid CSV questions can be reviewed, edited, and compared through the existing queue; malformed imports do not change drafts or start requests. The existing 20-question and 12,000-character-per-question limits remain. CSV implementation commits stay local unless separately authorized for publication.
