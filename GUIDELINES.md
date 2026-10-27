@@ -18,6 +18,21 @@ Keep Margin easy to run from a clean checkout: one prompt, two anonymous model r
 
 Document the goal and completion criteria here before implementation. Make focused changes, preserve existing work, test affected behavior, and commit coherent steps. Use an isolated worktree for large or risky changes. Publishing requires an explicit request.
 
+## Selectable OpenAI models
+
+Goal: let users choose exactly two distinct GPT text-generation models available to the backend's OpenAI API key before each comparison.
+
+- [ ] Discover available GPT text models through OpenAI's model-list API, keeping aliases and snapshots and excluding non-text modalities.
+- [ ] Route supported text models to their documented generation endpoints, keeping credentials server-side and avoiding automatic paid retries.
+- [ ] Validate and persist the chosen pair, including request-ID conflicts, while preserving randomized A/B assignment, reveal after voting, history, and scores.
+- [ ] Add labelled, keyboard-accessible selectors, loading/error/retry states, and responsive styling; preserve offline fixtures.
+- [ ] Update the README; verify automated checks, desktop/mobile interaction, and a bounded live comparison with inexpensive models.
+- [ ] Commit tested steps, merge cleanly into the original checkout, and remove the temporary worktree.
+
+Design reference lock: the existing Margin composer owns typography, light/dark surface colors, spacing, borders, and accent roles. Use native selects with visible labels and focus states, following Refero's bundled craft guidance for forms. Keep the pair controls together above the prompt; selection order must not imply answer A/B. No new imagery or dependencies. Live Refero references were unavailable because the subscription was inactive.
+
+Completion requires model discovery and selection to drive actual generation, safe failures without fallback, persistent model identities and scores, passing regression checks, and documented live-test limits. Use only temporary verification databases; preserve the user's existing data and local configuration.
+
 ## Public repository preparation
 
 Goal: remove private development information from all publishable history and verify the documented setup from a clean clone.
