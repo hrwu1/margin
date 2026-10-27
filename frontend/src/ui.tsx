@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { effectiveFeedback, readFeedbackPreferences } from './feedback';
 import type { ReactNode } from 'react';
 
 const icons: Record<string, ReactNode> = {
@@ -37,57 +38,83 @@ export function Dialog({ title, children, close, small = false }: { title: strin
 }
 export function useFeedback() {
   const [preferences, setPreferences] = useState(() => {
-    try { const saved = JSON.parse(localStorage.getItem('margin-feedback-v1') || '{}'); return { motion: saved.motion !== false, vibration: saved.vibration !== false }; }
-    catch { return { motion: true, vibration: true }; }
+    try { return readFeedbackPreferences(localStorage.getItem('margin-feedback-v1')); }
+    catch { return readFeedbackPreferences(null); }
   });
   const [reduced, setReduced] = useState(matchMedia('(prefers-reduced-motion: reduce)').matches);
+  const [touch, setTouch] = useState(matchMedia('(any-pointer: coarse)').matches);
+  const [storageError, setStorageError] = useState(false);
   const animations = useRef(new Set<Animation>());
-  const lastPulse = useRef(0);
-  const motion = preferences.motion && !reduced;
+  const flight = useRef<Animation | null>(null);
+  const lastPulse = useRef(-Infinity);
+  const { motion, vibrationAvailable, vibration } = effectiveFeedback(preferences, reduced, touch, typeof navigator.vibrate === 'function');
+  const cancel = useCallback(() => {
+    for (const animation of animations.current) animation.cancel();
+  }, []);
   useEffect(() => {
     const media = matchMedia('(prefers-reduced-motion: reduce)');
-    const update = () => setReduced(media.matches);
-    media.addEventListener('change', update);
-    return () => media.removeEventListener('change', update);
+    const pointer = matchMedia('(any-pointer: coarse)');
+    const update = () => { setReduced(media.matches); setTouch(pointer.matches); };
+    media.addEventListener('change', update); pointer.addEventListener('change', update);
+    return () => { media.removeEventListener('change', update); pointer.removeEventListener('change', update); };
   }, []);
   useEffect(() => {
     document.documentElement.dataset.motion = motion ? 'on' : 'off';
-    if (!motion) for (const animation of animations.current) animation.cancel();
-  }, [motion]);
+    if (!motion) cancel();
+  }, [motion, cancel]);
   useEffect(() => {
-    const active = animations.current;
-    const cancel = () => { if (document.hidden) for (const animation of active) animation.cancel(); };
-    document.addEventListener('visibilitychange', cancel);
-    return () => { document.removeEventListener('visibilitychange', cancel); for (const animation of active) animation.cancel(); };
-  }, []);
+    const hidden = () => { if (document.hidden) cancel(); };
+    document.addEventListener('visibilitychange', hidden);
+    return () => { document.removeEventListener('visibilitychange', hidden); cancel(); };
+  }, [cancel]);
   const pulse = (vote = false) => {
-    if (!preferences.vibration || reduced || document.hidden || !matchMedia('(any-pointer: coarse)').matches || !navigator.vibrate || performance.now() - lastPulse.current < 120) return;
-    try { navigator.vibrate(vote ? [12, 40, 18] : 8); lastPulse.current = performance.now(); } catch { /* Visible feedback remains available. */ }
+    if (!vibration || document.hidden || performance.now() - lastPulse.current < 120) return null;
+    try { const accepted = navigator.vibrate(vote ? [12, 40, 18] : 8); lastPulse.current = performance.now(); return accepted; }
+    catch { return false; }
   };
-  const transfer = (from?: DOMRect) => {
+  const animate = (element: Element, frames: Keyframe[], duration: number) => {
+    if (!motion || document.hidden) return null;
+    const animation = element.animate(frames, { duration, easing: 'cubic-bezier(.16,1,.3,1)' });
+    animations.current.add(animation);
+    const clean = () => animations.current.delete(animation);
+    animation.addEventListener('finish', clean, { once: true });
+    animation.addEventListener('cancel', clean, { once: true });
+    return animation;
+  };
+  const transfer = (from?: DOMRect, target: Element | null = document.querySelector('#evidence-toggle'), container: HTMLElement = document.body) => {
     pulse();
-    const target = document.querySelector('#evidence-toggle');
-    if (!motion || !from || !target) return;
+    if (!motion || !from || !target || document.hidden) return;
+    // One transient passage at a time, including rapid additions or repeated previews.
+    flight.current?.cancel();
     const to = target.getBoundingClientRect();
     const chip = document.createElement('div');
     chip.className = 'evidence-flight'; chip.textContent = 'Highlight'; chip.setAttribute('aria-hidden', 'true');
     chip.style.left = `${Math.max(8, Math.min(from.left, innerWidth - 110))}px`;
     chip.style.top = `${Math.max(8, Math.min(from.top, innerHeight - 40))}px`;
-    document.body.append(chip);
+    container.append(chip);
     const start = chip.getBoundingClientRect();
-    const animation = chip.animate([
-      { transform: 'translate(0,0) scale(.95)', opacity: 0 },
-      { transform: 'translate(0,-8px)', opacity: 1, offset: .2 },
-      { transform: `translate(${to.left - start.left}px,${to.top - start.top}px) scale(.3)`, opacity: 0 },
-    ], { duration: 540, easing: 'cubic-bezier(.22,.75,.2,1)' });
-    animations.current.add(animation);
-    const clean = () => { chip.remove(); animations.current.delete(animation); };
-    animation.onfinish = clean; animation.oncancel = clean;
+    const dx = to.left + to.width / 2 - start.left - start.width / 2;
+    const dy = to.top + to.height / 2 - start.top - start.height / 2;
+    const animation = animate(chip, [
+      { transform: 'translate(0,0) scale(.96)', opacity: .85 },
+      { transform: `translate(${dx * .48}px,${dy * .35 - 18}px) scale(.86)`, opacity: 1, offset: .45 },
+      { transform: `translate(${dx}px,${dy}px) scale(.2)`, opacity: 0 },
+    ], 420);
+    if (!animation) { chip.remove(); return; }
+    flight.current = animation;
+    const clean = () => { chip.remove(); if (flight.current === animation) flight.current = null; };
+    animation.addEventListener('cancel', clean, { once: true });
+    animation.addEventListener('finish', () => {
+      clean();
+      if (target.isConnected) animate(target, [{ transform: 'scale(1)' }, { transform: 'scale(1.045)', offset: .35 }, { transform: 'scale(1)' }], 180);
+    }, { once: true });
   };
   const toggle = (key: 'motion' | 'vibration') => {
+    if (reduced || (key === 'vibration' && !vibrationAvailable)) return;
     const next = { ...preferences, [key]: !preferences[key] }; setPreferences(next);
-    try { localStorage.setItem('margin-feedback-v1', JSON.stringify(next)); } catch { /* Visit-only preference. */ }
+    try { localStorage.setItem('margin-feedback-v1', JSON.stringify(next)); setStorageError(false); }
+    catch { setStorageError(true); }
   };
-  return { preferences, reduced, motion, pulse, transfer, toggle };
+  return { preferences, reduced, motion, vibration, vibrationAvailable, storageError, pulse, transfer, animate, cancel, toggle };
 }
 export type Feedback = ReturnType<typeof useFeedback>;

@@ -107,7 +107,11 @@ export function ComparisonPanel({ comparison, onSaved, drawerOpen, setDrawerOpen
       });
       onSaved(saved); setEditing(false); feedback.pulse(true);
       notify(vote ? 'Vote updated. Your scorecard now reflects this choice.' : 'Vote saved. Model identities revealed.');
-      requestAnimationFrame(() => document.getElementById('saved-decision')?.focus());
+      requestAnimationFrame(() => {
+        const decision = document.getElementById('saved-decision');
+        decision?.focus({ preventScroll: true });
+        if (decision) feedback.animate(decision, [{ opacity: .35, transform: 'translateY(6px)' }, { opacity: 1, transform: 'translateY(0)' }], 240);
+      });
     } catch (failure) { setVoteError(errorMessage(failure)); }
     finally { setSaving(false); }
   }
@@ -119,7 +123,7 @@ export function ComparisonPanel({ comparison, onSaved, drawerOpen, setDrawerOpen
     <div className={`workspace-body ${drawerOpen ? 'drawer-open' : ''}`}>
       <section className="comparison" aria-label="Compare answers">
         <div className="reading-status"><span><Icon name={vote ? 'check' : 'lock'}/>{vote ? 'Models revealed · your judgment is saved' : comparison.status === 'pending' ? 'Generating both answers · identities hidden' : 'Read first. Model identities stay hidden until you vote.'}</span><span className="selection-hint">Select text or use Highlight · Optional</span></div>
-        <div className="mobile-answer-tabs" aria-label="Visible answer">{(['A', 'B'] as const).map(side => <button key={side} aria-pressed={mobileSide === side} onClick={() => { setMobileSide(side); feedback.pulse(); }}>Answer {side}</button>)}</div>
+        <div className="mobile-answer-tabs" data-side={mobileSide} aria-label="Visible answer">{(['A', 'B'] as const).map(side => <button key={side} aria-pressed={mobileSide === side} onClick={() => { setMobileSide(side); feedback.pulse(); }}>Answer {side}</button>)}</div>
         <div className="answers" id="answers" tabIndex={-1}>
           {comparison.responses.map(answer => <article key={answer.side} className={`answer-panel ${vote?.choice === answer.side ? 'preferred' : ''}`} data-mobile-hidden={mobileSide !== answer.side} aria-label={`Answer ${answer.side}`}>
             <header className="answer-header"><span className="letter">{answer.side}</span><div className="answer-identity"><h2>{answer.model || `Answer ${answer.side}`}</h2><small>{answer.model ? 'Identity revealed' : 'Anonymous response'}</small></div><span className="identity-icon"><Icon name={vote ? 'check' : 'lock'}/>{vote ? 'Revealed' : 'Blind'}</span></header>
