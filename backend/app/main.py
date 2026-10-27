@@ -36,12 +36,12 @@ class CreateComparison(BaseModel):
     model_config = ConfigDict(extra='forbid')
     request_id: UUID
     prompt: str = Field(min_length=1, max_length=12000)
-    models: tuple[str, str]
+    models: tuple[str, str] | None = None
 
     @field_validator('models')
     @classmethod
     def distinct_models(cls, value):
-        if value[0] == value[1]:
+        if value is None or value[0] == value[1]:
             raise ValueError('Choose two distinct models.')
         return value
 
@@ -220,9 +220,12 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
     @app.post('/api/comparisons')
     async def create_comparison(body: CreateComparison, response: Response, owner: Annotated[str, Depends(session)]):
         available = await provider.list_models()
-        if any(model not in available for model in body.models):
+        # Older saved queues omitted models and always used this fixed pair.
+        selected = body.models if body.models is not None else (
+            ('gpt-5.6-luna', 'gpt-6-luna') if provider.mode == 'openai' else provider.models[:2])
+        if len(selected) != 2 or any(model not in available for model in selected):
             raise HTTPException(422, 'Choose two models from the available model list. Reload the list and try again.')
-        models = list(body.models)
+        models = list(selected)
         secrets.SystemRandom().shuffle(models)
         identifier, created = await asyncio.to_thread(db.create_comparison, owner, str(body.request_id), body.prompt, models, settings.max_active)
         record = await asyncio.to_thread(db.get_comparison, owner, identifier)

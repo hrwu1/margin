@@ -261,3 +261,39 @@ def test_catalog_failure_keeps_history_available_and_allows_retry(settings):
         provider.failure = None
         assert client.get('/api/models').status_code == 200
         assert settle(client, submit(client)['id'])['status'] == 'ready'
+
+
+def test_pre_selector_requests_reuse_original_fixed_pair(settings):
+    provider = ControlledProvider()
+    provider.mode = 'openai'
+    provider.models = ('gpt-4o-mini', 'gpt-5.6-luna', 'gpt-6-luna')
+    with TestClient(create_app(settings, provider)) as client:
+        session(client)
+        request_id = str(uuid4())
+        created = submit(client, request_id=request_id, models=['gpt-6-luna', 'gpt-5.6-luna'])
+        settle(client, created['id'])
+        response = client.post('/api/comparisons', json={'prompt': 'Explain an index', 'request_id': request_id}, headers=HEADERS)
+        assert response.status_code == 200 and response.json()['id'] == created['id']
+        assert sorted(provider.calls) == ['gpt-5.6-luna', 'gpt-6-luna']
+
+
+@pytest.mark.parametrize('models', [(), ('test-fast',)])
+def test_insufficient_catalog_never_generates(settings, models):
+    provider = ControlledProvider()
+    provider.models = models
+    with TestClient(create_app(settings, provider)) as client:
+        session(client)
+        assert client.get('/api/models').json() == {'items': list(models), 'defaults': list(models)}
+        response = client.post('/api/comparisons', json={'prompt': 'A question', 'request_id': str(uuid4())}, headers=HEADERS)
+        assert response.status_code == 422 and not provider.calls
+
+
+def test_offline_catalog_and_comparison_need_no_credentials(settings):
+    with TestClient(create_app(settings)) as client:
+        assert session(client).json()['provider_mode'] == 'mock'
+        models = ['local-concise', 'local-detailed']
+        assert client.get('/api/models').json() == {'items': models, 'defaults': models}
+        created = submit(client, models=models)
+        assert settle(client, created['id'])['status'] == 'ready'
+        voted = client.post(f'/api/comparisons/{created["id"]}/vote', json={'choice': 'tie'}, headers=HEADERS).json()
+        assert sorted(answer['model'] for answer in voted['responses']) == models

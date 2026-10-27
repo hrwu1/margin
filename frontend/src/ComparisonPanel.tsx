@@ -9,8 +9,9 @@ import type { Feedback } from './ui';
 
 export type ComparisonHandle = { flush: () => Promise<boolean> };
 const reasons: Reason[] = ['Correctness', 'Clarity', 'Useful detail', 'Follows the prompt'];
-export function ComparisonPanel({ comparison, onSaved, drawerOpen, setDrawerOpen, onNew, feedback, notify, ref }: {
+export function ComparisonPanel({ comparison, onSaved, drawerOpen, setDrawerOpen, onNew, nextQuestion, feedback, notify, ref }: {
   comparison: Comparison; onSaved: (value: Comparison) => void; drawerOpen: boolean; setDrawerOpen: (open: boolean) => void;
+  nextQuestion?: { ready: boolean; label: string; open: () => void };
   onNew: (prompt?: string) => void; feedback: Feedback; notify: (message: string) => void; ref: Ref<ComparisonHandle>;
 }) {
   const { draft, update, status, error, flush, revision, discard } = useAnnotations(comparison, onSaved);
@@ -34,7 +35,7 @@ export function ComparisonPanel({ comparison, onSaved, drawerOpen, setDrawerOpen
   useEffect(() => {
     if (!drawerOpen || !compact) return;
     const previous = document.activeElement as HTMLElement;
-    const background = [...document.querySelectorAll<HTMLElement>('.sidebar,.topbar,.prompt-region,.comparison,.workspace-foot,.skip-link')];
+    const background = [...document.querySelectorAll<HTMLElement>('.sidebar,.topbar,.prompt-region,.comparison,.workspace-foot,.skip-link,.question-queue')];
     background.forEach(element => { element.inert = true; });
     drawer.current?.querySelector<HTMLButtonElement>('button')?.focus();
     const keys = (event: KeyboardEvent) => {
@@ -146,7 +147,7 @@ export function ComparisonPanel({ comparison, onSaved, drawerOpen, setDrawerOpen
         </div>
         {voteError && <div className="storage-warning" role="alert">{voteError}</div>}
         <section className="decision-dock" aria-label="Your decision">
-          {vote && !editing ? <><div className="saved-decision" id="saved-decision" tabIndex={-1}><span className="saved-icon"><Icon name="check"/></span><div><strong>{vote.choice === 'tie' ? 'You chose a tie' : `You preferred answer ${vote.choice}`}</strong><p>{draft.highlights.length} highlights · {draft.reason || 'No reason added'}{vote.edited && <span className="edited-label">Edited after reveal</span>}</p></div></div><div className="dock-actions"><button className="quiet-button" ref={editButton} onClick={() => setEditing(true)}>Change vote</button><button className="primary" onClick={() => onNew()}>New comparison <Icon name="arrow"/></button></div></> : <>
+          {vote && !editing ? <><div className="saved-decision" id="saved-decision" tabIndex={-1}><span className="saved-icon"><Icon name="check"/></span><div><strong>{vote.choice === 'tie' ? 'You chose a tie' : `You preferred answer ${vote.choice}`}</strong><p>{draft.highlights.length} highlights · {draft.reason || 'No reason added'}{vote.edited && <span className="edited-label">Edited after reveal</span>}</p></div></div><div className="dock-actions"><button className="quiet-button" ref={editButton} onClick={() => setEditing(true)}>Change vote</button><button className="primary" disabled={nextQuestion && !nextQuestion.ready} onClick={() => nextQuestion ? nextQuestion.open() : onNew()}>{nextQuestion?.label || 'New comparison'} <Icon name="arrow"/></button></div></> : <>
             <div className="decision-copy"><strong>{editing ? 'Change your vote' : comparison.status === 'failed' ? 'This pair is incomplete' : 'Which answer works better?'}</strong>{editing ? <button className="quiet-button cancel-vote" disabled={saving} onClick={() => { setEditing(false); requestAnimationFrame(() => editButton.current?.focus()); }}>Cancel</button> : <span>{saving ? 'Saving decision…' : comparison.status === 'pending' ? 'Voting opens when both answers finish' : comparison.status === 'failed' ? 'Both answers must succeed to vote' : 'Your choice reveals the models'}</span>}</div>
             <div className="votes">{(['A', 'tie', 'B'] as const).map(choice => <button key={choice} className={`vote-button ${choice === 'tie' ? 'tie' : ''}`} disabled={saving || comparison.status !== 'ready'} aria-pressed={editing ? vote?.choice === choice : undefined} onClick={() => void cast(choice)}>{choice === 'tie' ? 'It’s a tie' : `Prefer ${choice}`}</button>)}</div>
           </>}
