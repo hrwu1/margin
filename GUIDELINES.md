@@ -57,3 +57,16 @@ Queue verification: eight focused scheduler tests cover five-item order, overlap
 UI verification: 17 frontend tests, 32 backend tests, TypeScript, and the production build pass. Desktop/mobile browser checks and injected network/save/delayed-read failures pass. Two live five-question runs produced 20 successful responses for an estimated $0.0024263 total. Final generation time was 13.87 seconds, with 0.06–0.37 second inter-pair gaps. Detailed evidence and pricing sources are recorded in DESIGN_NOTES.md.
 
 Integration: the tested commits were fast-forward merged into the original checkout, its frontend was rebuilt, and the temporary worktree and test servers were removed. No push was performed.
+
+
+## Motion and feedback clarity
+
+Goal: make the existing interaction preferences understandable and their effective device state truthful; improve spatial feedback while preserving reading, selection, saved decisions, and the question queue. The user approved renaming the menu, explaining each control, disabling unsupported vibration, and improving fluid motion.
+
+Reference lock: retain Margin's compact paired workspace, current type, neutral light/dark surfaces, and existing accent roles. Refero live style research returned NO_SUBSCRIPTION; use its bundled Motion & Micro-interactions and Craft Details guides. Motion communicates feedback and continuity: quick control responses, soft panel entry, a passage-to-Highlights transfer and clear vote acknowledgement. UI/UX guidance reinforces reduced-motion support and limiting simultaneous movement. No palette redesign, imagery, dependencies, decorative loops, or backend changes.
+
+- [ ] Replace Interaction settings with Motion & feedback; use labelled switches, concrete descriptions, effective On/Off/Unavailable states, system-override guidance, and a safe preview that does not alter comparisons.
+- [ ] Keep saved preferences compatible; derive vibration availability from touch/browser capability and respect reduced motion. Make storage failures explicit and keep physical vibration claims modest.
+- [ ] Improve interruptible highlight transfer, panel/control transitions and vote feedback; cancel transient effects on navigation/visibility/reduced-motion changes without changing saves, focus, selection or reading state.
+- [ ] Test preference/capability combinations and existing frontend workflows; build/typecheck. Browser-check motion on/off, preview, highlights/votes, keyboard, both themes, narrow screens and reduced motion in an isolated offline session.
+- [ ] Commit tested changes, integrate cleanly with concurrent work, rebuild the local app, and record verification and physical-device limits. Attempt managed-worktree cleanup without bypassing protection.
