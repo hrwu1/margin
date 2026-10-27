@@ -1,9 +1,20 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { QuestionQueue, restoreQueue, splitQuestions } from './questionQueue.ts';
+import { latestComparison } from './api.ts';
 
 const result = (status = 'pending', id = crypto.randomUUID()) => ({ id, status });
 const deferred = () => { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; };
+
+test('late pending snapshots cannot replace completed answers, votes, or notes', () => {
+  const ready = { ...result('ready'), vote: { choice: 'A' }, annotations: { note: 'Keep this' } };
+  assert.equal(latestComparison(ready, { id: ready.id, status: 'pending' }), ready);
+  const failed = { ...ready, status: 'failed' };
+  assert.equal(latestComparison(failed, { id: ready.id, status: 'pending' }), failed);
+  const next = result();
+  assert.equal(latestComparison(ready, next), next);
+  assert.equal(latestComparison(null, next), next);
+});
 
 test('five questions run in order, one pair at a time, without waiting for votes', async () => {
   const calls = [];

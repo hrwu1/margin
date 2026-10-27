@@ -2,7 +2,7 @@
 
 ## Goal
 
-Keep Margin easy to run from a clean checkout: one prompt, two anonymous model responses, optional highlights and notes, voting, and persistent personal history and scores.
+Keep Margin easy to run from a clean checkout: one prompt or a question list, two anonymous model responses per question, optional highlights and notes, voting, and persistent personal history and scores.
 
 ## Project layout and contracts
 
@@ -40,12 +40,12 @@ Goal: enter a list once and compare each independent answer pair without repeate
 
 Design: keep Margin's current typography, neutral surfaces, compact controls, and accent roles. The existing interface is the visual reference; Refero live research was unavailable. Bundled form/focus and motion guidance informs labelled fields, visible focus, stable reading position, and restrained state feedback.
 
-- [ ] Add labelled question rows and paste-list entry, preserving multiline single prompts.
+- [x] Add labelled question rows and paste-list entry, preserving multiline single prompts.
 - [x] Run one pair at a time; start the next question after both answers settle, while the user reads or votes. Never automatically navigate or reveal identities.
-- [ ] Show queued/generating/ready/failed states and pause/resume. Pause after failures; never automatically retry a paid generation.
+- [x] Show queued/generating/ready/failed states and pause/resume. Pause after failures; never automatically retry a paid generation.
 - [x] Reuse request IDs across reconnects; preserve the queue in this tab's session storage, restoring paused after reload. Completed comparisons stay in the existing notebook.
-- [ ] Preserve annotation flush guards, single-prompt behavior, mobile controls, and reduced motion.
-- [ ] Verify scheduling, errors, duplicate prevention, persistence, browser interactions, and five varied questions against both configured live models for less than $2.
+- [x] Preserve annotation flush guards, single-prompt behavior, mobile controls, and reduced motion.
+- [x] Verify scheduling, errors, duplicate prevention, persistence, browser interactions, and five varied questions against both configured live models for less than $2.
 - [ ] Commit tested steps, merge cleanly into the original checkout, and remove the temporary worktree.
 
 Scope: the existing API and per-session generation limit remain the source of truth. Queue orchestration lives in the browser; closing the tab stops unsent questions. No backend queue service or dependencies are needed.
@@ -53,3 +53,5 @@ Scope: the existing API and per-session generation limit remain the source of tr
 Completion requires passing automated checks and browser evidence, recorded real-model latency/usage, and clear limits on recovery and cost measurement.
 
 Queue verification: eight focused scheduler tests cover five-item order, overlapping ticks, pause during creation, incomplete pairs, lost POST responses, failed GET recovery, reload behavior, and input limits. They pass with the existing frontend tests.
+
+UI verification: 17 frontend tests, 32 backend tests, TypeScript, and the production build pass. Desktop/mobile browser checks and injected network/save/delayed-read failures pass. Two live five-question runs produced 20 successful responses for an estimated $0.0024263 total. Final generation time was 13.87 seconds, with 0.06–0.37 second inter-pair gaps. Detailed evidence and pricing sources are recorded in DESIGN_NOTES.md.

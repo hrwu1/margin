@@ -60,11 +60,19 @@ The key stays on the backend. `.env` is ignored by Git; never put the key in fro
 
 ## Using Margin
 
-1. **Ask once.** Enter a prompt and start a comparison. The two requests run concurrently; an answer appears when it finishes.
+1. **Ask once, or prepare a list.** Enter a single prompt, or choose **Question list** to add up to 20 questions. **Paste a list** accepts one question per line; individual fields support multiline prompts and code. The start button shows the number of questions and model calls.
 2. **Read A and B.** Compare side by side on desktop, or switch answer tabs on a narrow screen. Model names stay hidden until you vote.
 3. **Keep useful details, optionally.** Select text or use a paragraph's Highlight control. Keep several passages from either answer and add a note to each. An overall reason and decision note are separate from individual highlights. Highlights record what influenced your choice; they are not citations or an automated fact check.
 4. **Vote A, B, or tie.** Voting reveals the models and freezes your highlights and reasoning as a snapshot. You can vote without adding any notes. Both answers must finish successfully before voting is available.
 5. **Revisit or revise.** Open a saved comparison from the notebook. Change vote updates your choice, preserves the original notes, and labels the result **Edited after reveal**. Each comparison contributes only its latest vote to the scorecard.
+
+### Comparing a question list
+
+Each question is an independent comparison with the same two models. Both models run concurrently for that question. Once both responses finish, the next question starts automatically while you read, highlight, or vote. Only one pair runs at a time; the workspace never switches questions automatically. Use **Next question** or expand the queue to open an answer pair.
+
+**Pause queue** stops new questions after the current pair finishes. A model or connection failure pauses the queue; **Resume queue** reconnects using the existing request ID and continues remaining questions. Failed answers are retained, not automatically retried. After pausing, expand the queue to discard unsent questions once the current request is resolved. Completed comparisons remain in the notebook.
+
+The queue is kept in this tab's session storage. Keep the tab open to send remaining questions. Reloading restores the list paused and checks any known in-progress comparison; press **Resume queue** to send more. Closing the tab can lose unsent questions. A lost creation response is reconciled using the same request ID before the queue can be cleared, preventing accidental duplicate requests. Each started question makes two potentially billable model requests; pausing does not cancel an already-started pair.
 
 Draft notes save automatically. If saving fails, retry or deliberately reload the saved version before leaving. Light mode is the default; your explicit theme choice is remembered. Motion respects your reduced-motion preference.
 

@@ -13,6 +13,11 @@ export type HistoryPage = { items: (Pick<Comparison, 'id' | 'prompt' | 'status' 
 export type Score = { model: string; wins: number; ties: number; losses: number; compared: number };
 export type Session = { provider_mode: string; max_prompt_length: number };
 
+export function latestComparison(previous: Comparison | null, incoming: Comparison): Comparison {
+  // A delayed initial read must not undo a completed generation poll.
+  return previous?.id === incoming.id && previous.status !== 'pending' && incoming.status === 'pending' ? previous : incoming;
+}
+
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   let response: Response;
   try { response = await fetch(`/api${path}`, {

@@ -49,3 +49,30 @@ During implementation, browser checks separately exercised real responses from b
 3. **Improve reading and evaluation:** broaden safe Markdown support, add streaming with explicit partial-result semantics, and support curated prompt sets before drawing stronger conclusions from scores.
 
 All required assessment workflows are implemented. Public deployment is optional and has not been prepared; the application currently runs locally.
+
+## Question lists and generation timing
+
+The list editor keeps each prompt independent, including multiline code. The browser schedules one comparison at a time through the existing idempotent API. Both models start together; the next question starts immediately after polling detects a completed pair, without waiting for a vote or another timer tick. Background work never changes the selected question. A failure pauses the list, and resuming never regenerates an already-created comparison.
+
+The queue controller is separate from the React subscription and from its editor/progress controls. Session storage retains prompts and request IDs in the current tab; answer content and notes remain in the backend. Reload restores paused, and closing the tab stops unsent work. This intentionally avoids a new backend job service for a local app. The existing per-session and global concurrency limits still apply.
+
+The interface follows Margin's existing design system: compact neutral controls, numbered fields, a collapsible progress strip, and stable answer columns. Form/focus and restrained-motion guidance informed the controls; live Refero research was unavailable. Selecting another question uses the existing annotation flush guard. A delayed initial GET cannot overwrite a completed generation snapshot.
+
+### Verification
+
+- 32 backend tests and 17 frontend tests pass; TypeScript and the production build pass. No new dependencies or database migrations.
+- Browser checks cover five-question paste, one-pair scheduling, pause/resume, reload recovery, blind answers, highlights and notes, voting and Next question, desktop/mobile layouts, light/dark themes, and reduced motion.
+- Fault injection covers a server-accepted POST whose response is lost (same request ID reused), failed annotation saves blocking navigation, mobile drawer focus isolation, and a delayed pending snapshot arriving after completion.
+- Five questions were randomly selected from a ten-question pool and submitted through the UI to GPT-5.6 Luna and GPT-6 Luna. They covered a study schedule, correlation versus causation, the Moon's rotation, Python empty-list handling, and JavaScript floating-point comparison. All ten answers completed successfully. Answers were inspected for relevance and usable formatting; this is a workflow smoke test, not a model-quality benchmark.
+
+| Question topic | Pair completion time | Gap before this pair |
+| --- | ---: | ---: |
+| Two-hour study schedule | 3.50 s | First pair |
+| Correlation and causation | 1.87 s | 0.13 s |
+| Moon's rotation | 2.68 s | 0.37 s |
+| Python empty-list handling | 2.19 s | 0.33 s |
+| JavaScript floating point | 2.76 s | 0.06 s |
+
+The final live run took 13.87 seconds from the first provider request to the last response (14.80 seconds including browser setup/actions). Mean provider latency was 2.46 seconds for GPT-5.6 Luna and 2.23 seconds for GPT-6 Luna. An earlier run exposed an extra timer delay; removing it reduced observed inter-pair gaps from 0.85–1.24 seconds to 0.06–0.37 seconds. Model latency varies, so total runtime is not a controlled speed benchmark.
+
+The final run used 155 input / 743 output tokens for GPT-5.6 Luna and 155 input / 562 output tokens for GPT-6 Luna, including reported reasoning tokens. Estimated cost was $0.0012191; both live runs together were $0.0024263, far below the authorized $2 limit. Estimates use returned usage and official standard pricing: [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna) and [OpenAI API pricing](https://developers.openai.com/api/docs/pricing). These are usage-based estimates, not a billing statement. The test harness capped each run at ten short requests and preserved the production 4,096-token output limit.
