@@ -1,5 +1,5 @@
 export type Side = string;
-export type Choice = Side | 'tie';
+export type Choice = 'A' | 'B' | 'tie';
 export type Reason = 'Correctness' | 'Clarity' | 'Useful detail' | 'Follows the prompt' | 'Depth' | 'Practicality';
 export type Highlight = { side: Side; paragraph_index: number; start: number; end: number; quote: string; note: string };
 export type Annotations = { highlights: Highlight[]; reason: Reason | null; note: string };
@@ -13,7 +13,7 @@ export type HistoryPage = { items: (Pick<Comparison, 'id' | 'prompt' | 'status' 
 export type Score = { model: string; wins: number; ties: number; losses: number; compared: number };
 export type Session = { provider_mode: string; max_prompt_length: number };
 export type ModelCatalog = { items: string[]; defaults: string[] };
-export type ModelPair = string[];
+export type ModelSelection = string[];
 export type RankedScore = Score & { average_rank: number };
 export type ScoreGroup = { participant_count: number; comparisons: number; items: RankedScore[] };
 
@@ -24,7 +24,7 @@ export function latestComparison(previous: Comparison | null, incoming: Comparis
   if (after > before) return incoming;
   if (previous.status !== 'pending' && incoming.status === 'pending') return previous;
   if (previous.vote && (!incoming.vote || incoming.vote.revision < previous.vote.revision)) return previous;
-  if (incoming.annotation_revision < previous.annotation_revision) return previous;
+  if (incoming.annotation_revision < previous.annotation_revision) return { ...incoming, annotations: previous.annotations, annotation_revision: previous.annotation_revision };
   return incoming;
 }
 

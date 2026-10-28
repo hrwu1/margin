@@ -1,16 +1,16 @@
-import type { Comparison, ModelPair } from './api';
+import type { Comparison, ModelSelection } from './api';
 
 export const MAX_QUESTIONS = 20;
 export type QueueItem = {
   requestId: string; prompt: string; id?: string;
-  models?: ModelPair; attempt?: number;
+  models?: ModelSelection; attempt?: number;
   status: 'queued' | 'starting' | Comparison['status'];
 };
 export type RetryOperation = { comparisonId: string; requestId: string; attempt: number; accepted?: boolean };
 export type QueueState = { items: QueueItem[]; paused: boolean; error: string; retry?: RetryOperation };
 export const emptyQueue = (): QueueState => ({ items: [], paused: true, error: '' });
 export const splitQuestions = (text: string) => text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-const validModels = (models: unknown): models is ModelPair => Array.isArray(models) && [2, 3].includes(models.length)
+const validModels = (models: unknown): models is ModelSelection => Array.isArray(models) && [2, 3].includes(models.length)
   && models.every(model => typeof model === 'string' && model.length > 0 && model.length <= 200) && new Set(models).size === models.length;
 
 export function restoreQueue(raw: string | null): QueueState {
@@ -47,7 +47,7 @@ export class QuestionQueue {
   snapshot = () => this.state;
   private update(state: QueueState) { this.state = state; this.listeners.forEach(listener => listener()); }
   get unfinished() { return Boolean(this.state.retry) || this.state.items.some(item => !['ready', 'failed'].includes(item.status)); }
-  start(prompts: string[], models: ModelPair) {
+  start(prompts: string[], models: ModelSelection) {
     if (this.busy || this.unfinished) throw new Error('Finish or clear the current question list first.');
     if (!validModels(models)) throw new Error('Choose two or three distinct models.');
     if (!prompts.length || prompts.length > MAX_QUESTIONS || prompts.some(prompt => !prompt.trim() || prompt.trim().length > 12000)) {
@@ -69,6 +69,16 @@ export class QuestionQueue {
     this.update({ ...this.state, paused: true, error: '' });
     return this.step();
   }
+  observe(comparison: Comparison) {
+    if (this.state.retry) return;
+    const item = this.state.items.find(item => item.id === comparison.id);
+    if (!item || comparison.attempt <= (item.attempt || 0)) return;
+    // A retry from another tab updates this queue but never resumes unsent work.
+    this.update({ ...this.state, paused: true,
+      error: comparison.status === 'failed' ? 'Some answers are incomplete. Retry failed answers or resume the remaining questions.' : '',
+      items: this.state.items.map(item => item.id === comparison.id ? { ...item, status: comparison.status, attempt: comparison.attempt } : item),
+    });
+  }
   clear() {
     // An unknown POST outcome must be reconciled before its request ID can be lost.
     if (this.busy || this.state.retry || this.state.items.some(item => item.status === 'starting' || item.status === 'pending')) return false;
@@ -89,6 +99,8 @@ export class QuestionQueue {
       const result = await this.request(item.id ? `/comparisons/${item.id}` : '/comparisons', item.id ? undefined : {
         method: 'POST', body: JSON.stringify({ prompt: item.prompt, models: item.models, request_id: item.requestId }),
       });
+      const latest = this.state.items.find(value => value.requestId === item.requestId);
+      if ((result.attempt || 0) < (latest?.attempt || 0)) return;
       this.update({ ...this.state,
         items: this.state.items.map((value, i) => i === index ? { ...value, id: result.id, status: result.status, attempt: result.attempt || 0 } : value),
         paused: this.state.paused || result.status === 'failed',

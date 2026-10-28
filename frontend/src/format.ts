@@ -45,3 +45,16 @@ export function sourceRange(parts: ReturnType<typeof inlineParts>, start: number
   if (start < 0 || end <= start || end > positions.length) return null;
   return { start: positions[start], end: positions[end - 1] + 1 };
 }
+
+export function rankingLabel(ranks: Record<string, number>): string {
+  const groups = new Map<number, string[]>();
+  for (const [side, rank] of Object.entries(ranks).sort(([a], [b]) => a.localeCompare(b))) {
+    groups.set(rank, [...(groups.get(rank) || []), side]);
+  }
+  return [...groups].sort(([a], [b]) => a - b).map(([, sides]) => sides.join(' = ')).join(' > ');
+}
+
+export function validRanking(ranks: Record<string, number>, sides: string[]): boolean {
+  return Object.keys(ranks).length === sides.length && sides.every(side => Number.isInteger(ranks[side]) && ranks[side] >= 1 && ranks[side] <= sides.length)
+    && Math.min(...Object.values(ranks)) === 1;
+}

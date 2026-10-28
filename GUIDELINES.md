@@ -2,7 +2,7 @@
 
 ## Goal
 
-Keep Margin easy to run from a clean checkout: one prompt or a question list, two anonymous model responses per question, optional highlights and notes, voting, and persistent personal history and scores.
+Keep Margin easy to run from a clean checkout: one prompt or a question list, two or three anonymous model responses per question, optional highlights and notes, full rankings, and persistent personal history and scores.
 
 ## Project layout and contracts
 
@@ -22,17 +22,19 @@ Document the goal and completion criteria here before implementation. Make focus
 
 Goal: offer two or three distinct models, rank every answer with ties, keep separate average-rank scorecards, and retry failed answers while preserving historical data. The user approved implementation after the design discussion; the final scoring rule is average occupied position for ties, lower is better.
 
-- [ ] Document the approved contracts in DESIGN_NOTES.md and implement a transactional, backed-up schema migration preserving all legacy data.
-- [ ] Support two/three participants and complete, revisable rankings; retain legacy vote compatibility and historical counts.
-- [ ] Calculate separate scorecards using average shared positions and one latest decision per comparison.
-- [ ] Add explicit failed-only retries with persistent idempotency, attempt guards, and queue reconciliation.
-- [ ] Extend model selection, ranking controls, compact columns, mobile tabs, history, offline fixtures, and question queues.
-- [ ] Verify migration preservation, ranking math, concurrency/failure recovery, terminal suites, and desktop/mobile browser workflows using temporary databases.
+- [x] Document the approved contracts in DESIGN_NOTES.md and implement a transactional, backed-up schema migration preserving all legacy data.
+- [x] Support two/three participants and complete, revisable rankings; retain legacy vote compatibility and historical counts.
+- [x] Calculate separate scorecards using average shared positions and one latest decision per comparison.
+- [x] Add explicit failed-only retries with persistent idempotency, attempt guards, and queue reconciliation.
+- [x] Extend model selection, ranking controls, compact columns, mobile tabs, history, offline fixtures, and question queues.
+- [x] Verify migration preservation, ranking math, concurrency/failure recovery, terminal suites, and desktop/mobile browser workflows using temporary databases.
 - [ ] Update README, commit coherent tested steps, merge cleanly, and remove the temporary worktree. Do not push.
 
 Reference lock: retain Margin's existing typography, neutral light/dark surfaces, accent roles, panels, native model selects, and narrow-screen tabs. Use Refero's bundled Forms and Focus States guidance for labelled rank controls and explicit save/retry feedback. The user requested narrower columns and deferred broader visual redesign. No imagery, new design system, or dependencies.
 
 Completion requires usable two/three-model end-to-end workflows, exact preservation of historical records during migration, tied-score examples (1/2/3, 1.5/1.5/3, 1/2.5/2.5, 2/2/2), safe retries, and passing affected checks. Use offline providers and isolated databases; no paid generation or publication is part of this task.
+
+Verification: 86 backend tests and 42 frontend tests pass, along with TypeScript and the production build. Browser verification uses an isolated browser profile and temporary database: legacy v2 decisions/evidence reopen; every original persisted field remains unchanged after migration and restart; two/three-model ranking, tied scores, revisions, C highlights, and separate scorecards pass. Desktop, 390px/320px, light/dark, narrow-screen tabs, keyboard focus, reduced motion, and a compact workspace with the highlights panel open were checked. A simulated lost retry acknowledgement survived reload with exactly three initial fixture calls and one failed-answer retry, preserved successful answers/notes, and kept remaining questions paused until Resume. Cross-tab retry/reload updates the local queue without resuming it. Late poll/attempt regression cases are covered. No browser JavaScript errors were observed. Live provider calls and physical-device behavior were not tested; no API credits or existing user database were used. The existing Starlette/httpx deprecation warning remains. Refero live lookup returned NO_SUBSCRIPTION; bundled form/focus guidance and the existing UI were used.
 
 ## Selectable OpenAI models
 

@@ -16,7 +16,7 @@ Retry snapshots carry attempt revisions so the client distinguishes a real faile
 
 The UI retains existing panels, themes and responsive navigation, uses labelled selectors for two/three models and ranks, and narrower desktop columns. Broader visual redesign is deferred. Verification covers old v1/v2 data and annotations, ranking/tie arithmetic and revision, cross-session isolation, retry idempotency/capacity/restarts/stale writes, queues and reload recovery, plus desktop/mobile browser interactions. Implementation uses offline fixtures, an isolated worktree, tested commits, and no push.
 
-Margin implements the assessment's complete loop: one prompt, two model responses, side-by-side comparison, voting, a scorecard, and persistent history. The product question guiding the implementation was: **can someone return to a preference and understand what led to it?** Optional highlights and notes make that possible without turning every vote into a form.
+Margin implements the assessment's complete loop: one prompt, two or three model responses, side-by-side comparison, complete rankings, separate scorecards, and persistent history. The product question guiding the implementation was: **can someone return to a preference and understand what led to it?** Optional highlights and notes make that possible without turning every vote into a form.
 
 ## Problem breakdown and development approach
 
@@ -46,7 +46,7 @@ Creation uses a session-scoped request ID to avoid duplicate generation when the
 
 **Blind choice with honest revision.** Model identities are withheld by the API until the first vote, and A/B assignment is shuffled. This reduces obvious identity and position cues; it cannot prevent guessing a model from its writing. Each browser session sees only its own records. An HTTP-only cookie carries a random token; the database stores its hash. This avoids account setup, at the cost of recovery and cross-device access.
 
-Changing a vote remains possible after reveal, but is labelled accordingly. Highlights and reasoning freeze on the first vote, preserving the original context. There is one current vote per comparison, and scores are calculated from those rows rather than incrementing counters. Revisions therefore cannot inflate totals. This is a personal win/tie/loss scorecard, not an Elo system or controlled benchmark.
+Changing a vote remains possible after reveal, but is labelled accordingly. Highlights and reasoning freeze on the first vote, preserving the original context. There is one current vote per comparison, and scores are calculated from those rows rather than incrementing counters. Revisions therefore cannot inflate totals. The current scorecards use personal average ranks with shared-position ties, while retaining legacy two-model win/tie/loss counts. They are not an Elo system or controlled benchmark.
 
 **Source fidelity and save correctness.** Highlights reference exact text ranges, validated against the stored response. Python and TypeScript use Unicode code-point offsets consistently. A small safe formatting layer preserves those positions without rendering arbitrary HTML. Annotation saves are serialized and debounced; voting and internal navigation flush pending edits. Revision numbers reject stale writes from another tab instead of silently overwriting them. Save errors remain visible, with retry or explicit reload.
 

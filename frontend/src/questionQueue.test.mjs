@@ -310,12 +310,53 @@ test('retry validates readiness, protects active work, and restores only valid o
 });
 
 test('attempt and decision revisions reject stale snapshots but allow deliberate retries', () => {
-  const failed = { ...result('failed'), attempt: 0, annotation_revision: 1, vote: null };
+  const failed = { ...result('failed'), attempt: 0, annotation_revision: 1, annotations: { note: '' }, vote: null };
   const pending = { ...failed, status: 'pending', attempt: 1 };
   assert.equal(latestComparison(failed, pending), pending);
   assert.equal(latestComparison(pending, failed), pending);
   const ranked = { ...pending, status: 'ready', vote: { revision: 1, ranks: { A: 1, B: 2 } } };
   assert.equal(latestComparison(ranked, { ...ranked, vote: null }), ranked);
   assert.equal(latestComparison(ranked, { ...ranked, vote: { revision: 0 } }), ranked);
-  assert.equal(latestComparison(ranked, { ...ranked, annotation_revision: 0 }), ranked);
+  assert.deepEqual(latestComparison(ranked, { ...ranked, annotation_revision: 0 }), ranked);
+});
+
+
+test('completion is retained when a poll carries older annotations', () => {
+  const pending = { ...result('pending'), attempt: 0, annotation_revision: 2, annotations: { note: 'Latest note' }, vote: null };
+  const ready = { ...pending, status: 'ready', annotation_revision: 1, annotations: { note: 'Old note' } };
+  const latest = latestComparison(pending, ready);
+  assert.equal(latest.status, 'ready');
+  assert.equal(latest.annotation_revision, 2);
+  assert.deepEqual(latest.annotations, pending.annotations);
+});
+
+
+test('a retry observed from another tab updates the existing queue and stays paused', async () => {
+  const id = crypto.randomUUID();
+  const queue = new QuestionQueue(async () => ({ ...result('ready', id), attempt: 1 }));
+  queue.state = { items: [{ requestId: crypto.randomUUID(), id, prompt: 'old', models, status: 'failed', attempt: 0 },
+    { requestId: crypto.randomUUID(), prompt: 'next', models, status: 'queued' }], paused: true, error: 'Incomplete' };
+  queue.observe({ ...result('pending', id), attempt: 1 });
+  assert.equal(queue.state.error, '');
+  assert.equal(queue.state.items[0].status, 'pending');
+  await queue.step();
+  assert.equal(queue.state.items[0].status, 'ready');
+  assert.equal(queue.state.items[1].status, 'queued');
+  assert.equal(queue.state.paused, true);
+  queue.observe({ ...result('failed', id), attempt: 0 });
+  assert.equal(queue.state.items[0].status, 'ready');
+});
+
+
+test('an in-flight queue poll cannot undo a newer observed retry attempt', async () => {
+  const id = crypto.randomUUID(), pending = deferred();
+  const queue = new QuestionQueue(async () => pending.promise);
+  queue.state = { items: [{ requestId: crypto.randomUUID(), id, prompt: 'old', models, status: 'pending', attempt: 0 }], paused: true, error: '' };
+  const poll = queue.step();
+  queue.observe({ ...result('pending', id), attempt: 1 });
+  pending.resolve({ ...result('failed', id), attempt: 0 });
+  await poll;
+  assert.equal(queue.state.items[0].attempt, 1);
+  assert.equal(queue.state.items[0].status, 'pending');
+  assert.equal(queue.state.error, '');
 });

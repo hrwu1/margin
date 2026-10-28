@@ -276,3 +276,14 @@ button:not(:disabled):active{transform:scale(.98)}
 
 html[data-motion=off] .dialog::backdrop{animation:none!important}
 @media(prefers-reduced-motion:reduce){.dialog::backdrop{animation:none!important}}
+
+/* Ranked comparisons retain the existing workspace and control roles. */
+.model-count{display:flex;align-items:center;gap:12px;margin-bottom:16px;font-size:12px;color:var(--secondary)}
+.model-count select,.ranking-controls select{background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:6px;min-height:40px;padding:8px;font:inherit}
+.ranking-controls{display:flex;align-items:flex-end;flex-wrap:wrap;gap:10px;margin-left:auto}
+.ranking-controls label{display:grid;gap:6px;font-size:12px;color:var(--secondary)}
+.ranking-controls select{min-width:72px}.ranking-controls small{flex-basis:100%;color:var(--muted)}
+.retry-actions{display:grid;gap:8px;margin-left:auto}.retry-actions small{font-size:11px;color:var(--muted)}
+.mobile-answer-tabs::before{width:calc(100% / var(--answer-count, 2));transform:translateX(calc(var(--active-answer, 0) * 100%))!important}
+.scorecard-toolbar>span{font-size:11px;color:var(--muted)}
+@media(max-width:600px){.model-fields{grid-template-columns:minmax(0,1fr)!important}.ranking-controls{margin-left:0;width:100%;gap:8px}.ranking-controls select{min-height:44px;font-size:16px}.ranking-controls .primary{margin-left:auto}.retry-actions{margin-left:0}.decision-dock{flex-wrap:wrap}}
