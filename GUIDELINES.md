@@ -38,6 +38,15 @@ Verification: 86 backend tests and 42 frontend tests pass, along with TypeScript
 
 Integration: tested commits were fast-forwarded cleanly into local main. The temporary worktree and offline verification server were removed. The existing application server and its served frontend build were left intact; rebuild the frontend and restart the backend together to activate this update and its backed-up database migration. No push was performed.
 
+### Activating the ranked-comparison update
+
+Goal: rebuild and restart the approved implementation on the existing local port and database, preserving configuration and saved records.
+
+- [x] Build the production frontend and restart the existing idle server on the same port.
+- [x] Verify the migration backup, original stored data, new API routes, and served frontend build without generating answers.
+
+Activation verification: the production build and TypeScript check passed. The idle backend was restarted on its existing loopback port with its existing live-model configuration and database. Startup created a restricted-permission pre-migration backup and upgraded schema v2 to v3. Aggregate fingerprints of every original column in sessions, comparisons, responses, votes, and annotations matched exactly afterward (9 comparisons, 6 votes); database integrity and foreign keys passed. Health, ranking/retry/scorecard routes, and the served build were verified. No answers were generated during activation.
+
 ## Selectable OpenAI models
 
 Goal: let users choose exactly two distinct GPT text-generation models available to the backend's OpenAI API key before each comparison.
