@@ -36,13 +36,13 @@ class CreateComparison(BaseModel):
     model_config = ConfigDict(extra='forbid')
     request_id: UUID
     prompt: str = Field(min_length=1, max_length=12000)
-    models: tuple[str, str] | None = None
+    models: list[str] | None = Field(default=None, min_length=2, max_length=3)
 
     @field_validator('models')
     @classmethod
     def distinct_models(cls, value):
-        if value is None or value[0] == value[1]:
-            raise ValueError('Choose two distinct models.')
+        if value is None or len(set(value)) != len(value):
+            raise ValueError('Choose two or three distinct models.')
         return value
 
     @field_validator('prompt', mode='before')
@@ -53,7 +53,7 @@ class CreateComparison(BaseModel):
 
 class Evidence(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    side: Literal['A', 'B']
+    side: str = Field(pattern=r'^[A-Z]$')
     paragraph_index: int = Field(ge=0, strict=True)
 
 
@@ -89,6 +89,18 @@ class ReviseVote(BaseModel):
     revision: int = Field(ge=0, strict=True)
 
 
+class Ranking(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    ranks: dict[str, Annotated[int, Field(ge=1, le=3, strict=True)]] = Field(min_length=2, max_length=3)
+    annotation_revision: int = Field(ge=0, strict=True)
+
+
+class ReviseRanking(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    ranks: dict[str, Annotated[int, Field(ge=1, le=3, strict=True)]] = Field(min_length=2, max_length=3)
+    revision: int = Field(ge=0, strict=True)
+
+
 def public_comparison(record):
     vote = record['vote']
     responses = [{
@@ -103,8 +115,8 @@ def public_comparison(record):
         if vote['evidence_side']:
             answer = next(answer for answer in responses if answer['side'] == vote['evidence_side'])
             evidence = {'side': vote['evidence_side'], 'paragraph_index': vote['evidence_index'], 'quote': answer['paragraphs'][vote['evidence_index']]}
-        public_vote = {'choice': vote['choice'], 'reason': vote['reason'], 'evidence': evidence, 'created_at': vote['created_at'], 'edited': bool(vote['edited']), 'revision': vote['revision'], 'updated_at': vote['updated_at']}
-    return {'id': record['id'], 'prompt': record['prompt'], 'status': record['status'],
+        public_vote = {'ranks': vote['ranks'], 'choice': vote['choice'], 'reason': vote['reason'], 'evidence': evidence, 'created_at': vote['created_at'], 'edited': bool(vote['edited']), 'revision': vote['revision'], 'updated_at': vote['updated_at']}
+    return {'attempt': record['attempt'], 'id': record['id'], 'prompt': record['prompt'], 'status': record['status'],
             'created_at': record['created_at'], 'responses': responses, 'vote': public_vote,
             'annotations': record['annotations'], 'annotation_revision': record['annotation_revision']}
 
@@ -223,8 +235,8 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         # Older saved queues omitted models and always used this fixed pair.
         selected = body.models if body.models is not None else (
             ('gpt-5.6-luna', 'gpt-6-luna') if provider.mode == 'openai' else provider.models[:2])
-        if len(selected) != 2 or any(model not in available for model in selected):
-            raise HTTPException(422, 'Choose two models from the available model list. Reload the list and try again.')
+        if len(selected) not in (2, 3) or any(model not in available for model in selected):
+            raise HTTPException(422, 'Choose two or three models from the available model list. Reload the list and try again.')
         models = list(selected)
         secrets.SystemRandom().shuffle(models)
         identifier, created = await asyncio.to_thread(db.create_comparison, owner, str(body.request_id), body.prompt, models, settings.max_active)
@@ -258,6 +270,20 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
     async def revise_vote(comparison_id: UUID, body: ReviseVote, owner: Annotated[str, Depends(session)]):
         record = await asyncio.to_thread(db.revise_vote, owner, str(comparison_id), body.choice, body.revision)
         return public_comparison(record)
+
+    @app.post('/api/comparisons/{comparison_id}/ranking')
+    async def rank(comparison_id: UUID, body: Ranking, owner: Annotated[str, Depends(session)]):
+        record = await asyncio.to_thread(db.rank, owner, str(comparison_id), body.ranks, body.annotation_revision)
+        return public_comparison(record)
+
+    @app.patch('/api/comparisons/{comparison_id}/ranking')
+    async def revise_ranking(comparison_id: UUID, body: ReviseRanking, owner: Annotated[str, Depends(session)]):
+        record = await asyncio.to_thread(db.rank, owner, str(comparison_id), body.ranks, revision=body.revision)
+        return public_comparison(record)
+
+    @app.get('/api/scorecards')
+    async def scorecards(owner: Annotated[str, Depends(session)]):
+        return {'groups': await asyncio.to_thread(db.scorecards, owner)}
 
     @app.get('/api/scores')
     async def scores(owner: Annotated[str, Depends(session)]):

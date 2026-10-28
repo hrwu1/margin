@@ -292,7 +292,7 @@ def test_offline_catalog_and_comparison_need_no_credentials(settings):
     with TestClient(create_app(settings)) as client:
         assert session(client).json()['provider_mode'] == 'mock'
         models = ['local-concise', 'local-detailed']
-        assert client.get('/api/models').json() == {'items': models, 'defaults': models}
+        assert client.get('/api/models').json() == {'items': [*models, 'local-structured'], 'defaults': models}
         created = submit(client, models=models)
         assert settle(client, created['id'])['status'] == 'ready'
         voted = client.post(f'/api/comparisons/{created["id"]}/vote', json={'choice': 'tie'}, headers=HEADERS).json()

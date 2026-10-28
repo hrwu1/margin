@@ -18,7 +18,7 @@ class Provider(Protocol):
 class MockProvider:
     """An explicit, deterministic fixture; it never calls a model or the network."""
 
-    models = ('local-concise', 'local-detailed')
+    models = ('local-concise', 'local-detailed', 'local-structured')
     mode = 'mock'
 
     async def list_models(self) -> tuple[str, ...]:
@@ -27,6 +27,8 @@ class MockProvider:
     async def generate(self, model: str, prompt: str) -> str:
         await asyncio.sleep(0.4 if model == self.models[0] else 0.9)
         received = prompt[:1000] + ('…' if len(prompt) > 1000 else '')
+        if model == 'local-structured':
+            return f'Local test response — no AI model was called.\n\nPrompt received: {received}\n\n1. Read all responses before ranking.\n2. Give every answer a rank; equal numbers are ties.\n3. Save your ranking to reveal the models.'
         if model == self.models[0]:
             return f'Local test response — no AI model was called.\n\nPrompt received: {received}\n\nThis concise fixture lets you exercise paragraph selection, voting, and persistence. It is not an answer to your question.'
         return f'Local test response — no AI model was called.\n\nYou asked: {received}\n\nThis longer fixture provides a different response for comparing the workflow. Select this paragraph if you want to test saving evidence.\n\nAfter you vote, reopen the comparison from History. The backend should restore your vote, reason, and exact passage.'

@@ -180,9 +180,19 @@ def test_v1_migration_keeps_evidence_and_scores(db):
     db.vote('alice', identifier, 'B', 'Clarity', {'side': 'A', 'paragraph_index': 1})
     # Reconstruct v1's exact columns while retaining a real persisted comparison/vote.
     with db.connect() as connection:
-        connection.execute('DROP TABLE annotations')
-        for column in ('edited', 'revision', 'updated_at'):
-            connection.execute(f'ALTER TABLE votes DROP COLUMN {column}')
+        connection.executescript("""
+            DROP TABLE annotations;
+            DROP TABLE retry_requests;
+            ALTER TABLE comparisons DROP COLUMN attempt;
+            CREATE TABLE old_votes (
+                comparison_id TEXT PRIMARY KEY REFERENCES comparisons(id) ON DELETE CASCADE,
+                choice TEXT NOT NULL CHECK(choice IN ('A','B','tie')),
+                reason TEXT, evidence_side TEXT, evidence_index INTEGER, created_at TEXT NOT NULL
+            );
+            INSERT INTO old_votes SELECT comparison_id, choice, reason, evidence_side, evidence_index, created_at FROM votes;
+            DROP TABLE votes;
+            ALTER TABLE old_votes RENAME TO votes;
+        """)
         connection.execute('PRAGMA user_version = 1')
     db.initialize()
     db.initialize()

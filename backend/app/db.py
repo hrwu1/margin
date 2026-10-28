@@ -30,6 +30,18 @@ def paragraphs(content: str) -> list[str]:
     return [part.strip() for part in content.split("\n\n") if part.strip()]
 
 
+def decision_ranks(vote, sides):
+    if vote['ranks'] is not None:
+        return json.loads(vote['ranks'])
+    return {side: 1 if vote['choice'] in ('tie', side) else 2 for side in sides}
+
+
+def shared_positions(ranks: dict[str, int]) -> dict[str, float]:
+    values = list(ranks.values())
+    return {side: 1 + sum(other < rank for other in values) + (values.count(rank) - 1) / 2
+            for side, rank in ranks.items()}
+
+
 class Database:
     def __init__(self, path: Path):
         self.path = path
@@ -57,8 +69,13 @@ class Database:
         with self.connect() as connection:
             connection.execute("PRAGMA journal_mode = WAL")
             version = connection.execute("PRAGMA user_version").fetchone()[0]
-            if version > 2:
+            if version > 3:
                 raise RuntimeError("Database schema is newer than this application.")
+            if 0 < version < 3:
+                backup = self.path.with_name(f'{self.path.stem}.pre-v3-{uuid4().hex}.sqlite3')
+                backup.touch(mode=0o600, exist_ok=False)
+                with sqlite3.connect(backup) as destination:
+                    connection.backup(destination)
             if version == 0:
                 connection.executescript("""
                     BEGIN IMMEDIATE;
@@ -114,6 +131,50 @@ class Database:
                     COMMIT;
                 """)
 
+            if version < 3:
+                connection.executescript("""
+                    BEGIN IMMEDIATE;
+                    CREATE TABLE responses_v3 (
+                        comparison_id TEXT NOT NULL REFERENCES comparisons(id) ON DELETE CASCADE,
+                        side TEXT NOT NULL,
+                        model TEXT NOT NULL,
+                        status TEXT NOT NULL CHECK(status IN ('pending','success','error')),
+                        content TEXT NOT NULL DEFAULT '',
+                        error_code TEXT,
+                        PRIMARY KEY(comparison_id, side),
+                        UNIQUE(comparison_id, model)
+                    );
+                    INSERT INTO responses_v3 SELECT * FROM responses;
+                    DROP TABLE responses;
+                    ALTER TABLE responses_v3 RENAME TO responses;
+                    CREATE TABLE votes_v3 (
+                        comparison_id TEXT PRIMARY KEY REFERENCES comparisons(id) ON DELETE CASCADE,
+                        choice TEXT CHECK(choice IN ('A','B','tie')),
+                        reason TEXT CHECK(reason IN ('Clarity','Depth','Practicality','Follows the prompt')),
+                        evidence_side TEXT,
+                        evidence_index INTEGER CHECK(evidence_index >= 0),
+                        created_at TEXT NOT NULL,
+                        edited INTEGER NOT NULL DEFAULT 0,
+                        revision INTEGER NOT NULL DEFAULT 0,
+                        updated_at TEXT,
+                        ranks TEXT,
+                        CHECK(choice IS NOT NULL OR ranks IS NOT NULL),
+                        CHECK((evidence_side IS NULL) = (evidence_index IS NULL))
+                    );
+                    INSERT INTO votes_v3 SELECT *, NULL FROM votes;
+                    DROP TABLE votes;
+                    ALTER TABLE votes_v3 RENAME TO votes;
+                    ALTER TABLE comparisons ADD COLUMN attempt INTEGER NOT NULL DEFAULT 0;
+                    CREATE TABLE retry_requests (
+                        comparison_id TEXT NOT NULL REFERENCES comparisons(id) ON DELETE CASCADE,
+                        request_id TEXT NOT NULL,
+                        attempt INTEGER NOT NULL,
+                        PRIMARY KEY(comparison_id, request_id)
+                    );
+                    PRAGMA user_version = 3;
+                    COMMIT;
+                """)
+
     def has_session(self, token_hash: str) -> bool:
         with self.connect() as connection:
             return connection.execute("SELECT 1 FROM sessions WHERE token_hash = ?", (token_hash,)).fetchone() is not None
@@ -123,8 +184,8 @@ class Database:
             connection.execute("INSERT INTO sessions VALUES (?, ?)", (token_hash, now()))
 
     def create_comparison(self, session: str, request_id: str, prompt: str, models: list[str], max_active: int):
-        if len(models) != 2 or len(set(models)) != 2:
-            raise ValueError("A comparison needs two distinct models.")
+        if len(models) not in (2, 3) or len(set(models)) != len(models):
+            raise ValueError("A comparison needs two or three distinct models.")
         with self.connect(write=True) as connection:
             previous = connection.execute(
                 "SELECT id, prompt FROM comparisons WHERE session_hash = ? AND request_id = ?",
@@ -143,10 +204,10 @@ class Database:
             if connection.execute("SELECT COUNT(*) FROM comparisons WHERE status = 'pending'").fetchone()[0] >= max_active:
                 raise Capacity("The server is busy. Please try again shortly.")
             identifier = str(uuid4())
-            connection.execute("INSERT INTO comparisons VALUES (?, ?, ?, ?, 'pending', ?)", (identifier, session, request_id, prompt, now()))
+            connection.execute("INSERT INTO comparisons(id, session_hash, request_id, prompt, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)", (identifier, session, request_id, prompt, now()))
             connection.executemany(
                 "INSERT INTO responses(comparison_id, side, model, status) VALUES (?, ?, ?, 'pending')",
-                [(identifier, side, model) for side, model in zip(('A', 'B'), models)],
+                [(identifier, side, model) for side, model in zip((chr(65 + index) for index in range(len(models))), models)],
             )
         return identifier, True
 
@@ -157,7 +218,7 @@ class Database:
                 ('error' if error_code else 'success', content, error_code, comparison_id, side),
             )
             statuses = [row[0] for row in connection.execute("SELECT status FROM responses WHERE comparison_id = ?", (comparison_id,))]
-            if len(statuses) == 2 and 'pending' not in statuses:
+            if statuses and 'pending' not in statuses:
                 connection.execute("UPDATE comparisons SET status = ? WHERE id = ?", ('ready' if all(status == 'success' for status in statuses) else 'failed', comparison_id))
 
     def recover_interrupted(self):
@@ -175,6 +236,12 @@ class Database:
         result['responses'] = [dict(row) for row in connection.execute("SELECT * FROM responses WHERE comparison_id = ? ORDER BY side", (comparison_id,))]
         vote = connection.execute("SELECT * FROM votes WHERE comparison_id = ?", (comparison_id,)).fetchone()
         result['vote'] = dict(vote) if vote else None
+        if vote:
+            result['vote']['ranks'] = decision_ranks(vote, [answer['side'] for answer in result['responses']])
+            if vote['ranks'] is not None:
+                ranks = result['vote']['ranks']
+                result['vote']['choice'] = (('tie' if len(set(ranks.values())) == 1 else min(ranks, key=ranks.get))
+                                            if len(ranks) == 2 else None)
         annotations = connection.execute('SELECT revision, document FROM annotations WHERE comparison_id = ?', (comparison_id,)).fetchone()
         result['annotation_revision'] = annotations['revision'] if annotations else 0
         result['annotations'] = json.loads(annotations['document']) if annotations else {'highlights': [], 'reason': None, 'note': ''}
@@ -202,8 +269,10 @@ class Database:
             comparison = self._get(connection, session, comparison_id)
             if annotation_revision is not None and annotation_revision != comparison['annotation_revision']:
                 raise Conflict('Your highlights changed in another tab. Reload before voting.')
+            if len(comparison['responses']) != 2:
+                raise InvalidVote('Rank every response in this comparison.')
             if comparison['status'] != 'ready':
-                raise Conflict("Both responses must succeed before you can vote.")
+                raise Conflict('All responses must succeed before you can vote.')
             if evidence:
                 answer = next((answer for answer in comparison['responses'] if answer['side'] == side), None)
                 if not answer or type(index) is not int or not 0 <= index < len(paragraphs(answer['content'])):
@@ -252,35 +321,107 @@ class Database:
         with self.connect(write=True) as connection:
             comparison = self._get(connection, session, comparison_id)
             previous = comparison['vote']
+            if len(comparison['responses']) != 2:
+                raise InvalidVote('Rank every response in this comparison.')
             if not previous:
                 raise Conflict('Vote before revising a decision.')
             if revision != previous['revision']:
                 raise Conflict('Your vote changed in another tab. Reload before editing it.')
             if choice != previous['choice']:
-                connection.execute('UPDATE votes SET choice=?, edited=1, revision=revision+1, updated_at=? WHERE comparison_id=?',
+                connection.execute('UPDATE votes SET choice=?, ranks=NULL, edited=1, revision=revision+1, updated_at=? WHERE comparison_id=?',
                                    (choice, now(), comparison_id))
+            return self._get(connection, session, comparison_id)
+
+    def rank(self, session: str, comparison_id: str, ranks: dict, annotation_revision: int | None = None, revision: int | None = None):
+        with self.connect(write=True) as connection:
+            comparison = self._get(connection, session, comparison_id)
+            sides = {answer['side'] for answer in comparison['responses']}
+            if (set(ranks) != sides or any(type(rank) is not int or not 1 <= rank <= len(sides) for rank in ranks.values())
+                    or min(ranks.values(), default=0) != 1):
+                raise InvalidVote('Rank every answer from 1 to the number of answers, with at least one ranked 1. Equal ranks are ties.')
+            if comparison['status'] != 'ready':
+                raise Conflict('All responses must succeed before ranking.')
+            previous = comparison['vote']
+            if revision is None:
+                if annotation_revision != comparison['annotation_revision']:
+                    raise Conflict('Your highlights changed in another tab. Reload before ranking.')
+                if previous:
+                    if previous['ranks'] != ranks:
+                        raise Conflict('This comparison already has a decision. Use Change ranking.')
+                else:
+                    connection.execute('INSERT INTO votes(comparison_id, ranks, created_at) VALUES (?, ?, ?)',
+                                       (comparison_id, json.dumps(ranks, sort_keys=True), now()))
+            else:
+                if not previous:
+                    raise Conflict('Save a ranking before revising it.')
+                if revision != previous['revision']:
+                    raise Conflict('Your ranking changed in another tab. Reload before editing it.')
+                if previous['ranks'] != ranks:
+                    connection.execute('UPDATE votes SET ranks=?, edited=1, revision=revision+1, updated_at=? WHERE comparison_id=?',
+                                       (json.dumps(ranks, sort_keys=True), now(), comparison_id))
             return self._get(connection, session, comparison_id)
 
     def history(self, session: str, limit: int, offset: int):
         with self.connect() as connection:
             rows = connection.execute("""
-                SELECT c.id, c.prompt, c.status, c.created_at, v.choice AS vote, COALESCE(v.edited, 0) AS edited
+                SELECT c.id, c.prompt, c.status, c.created_at, v.choice AS vote, v.ranks,
+                    COALESCE(v.edited, 0) AS edited,
+                    (SELECT COUNT(*) FROM responses r WHERE r.comparison_id=c.id) AS participant_count
                 FROM comparisons c LEFT JOIN votes v ON v.comparison_id = c.id
                 WHERE c.session_hash = ? ORDER BY c.created_at DESC, c.id DESC LIMIT ? OFFSET ?
             """, (session, limit + 1, offset)).fetchall()
-        return {'items': [dict(row) for row in rows[:limit]], 'has_more': len(rows) > limit}
+        items = []
+        for row in rows[:limit]:
+            item = dict(row)
+            if item['ranks'] is not None:
+                item['ranks'] = json.loads(item['ranks'])
+                ranks = item['ranks']
+                item['vote'] = (('tie' if len(set(ranks.values())) == 1 else min(ranks, key=ranks.get))
+                                if len(ranks) == 2 else None)
+            elif item['vote']:
+                item['ranks'] = decision_ranks({'ranks': None, 'choice': item['vote']}, ['A', 'B'])
+            items.append(item)
+        return {'items': items, 'has_more': len(rows) > limit}
 
-    def scores(self, session: str, models: tuple[str, ...]):
-        result = {model: {'model': model, 'wins': 0, 'ties': 0, 'losses': 0, 'compared': 0} for model in models}
+    def scorecards(self, session: str):
+        groups = {count: {'participant_count': count, 'comparisons': 0, 'items': {}} for count in (2, 3)}
         with self.connect() as connection:
             rows = connection.execute("""
-                SELECT r.model, COUNT(*) AS compared,
-                    SUM(v.choice = r.side) AS wins, SUM(v.choice = 'tie') AS ties,
-                    SUM(v.choice != 'tie' AND v.choice != r.side) AS losses
-                FROM votes v JOIN comparisons c ON c.id = v.comparison_id
-                JOIN responses r ON r.comparison_id = c.id
-                WHERE c.session_hash = ? GROUP BY r.model
+                SELECT v.comparison_id, v.choice, v.ranks, r.side, r.model
+                FROM votes v JOIN comparisons c ON c.id=v.comparison_id
+                JOIN responses r ON r.comparison_id=c.id
+                WHERE c.session_hash=? ORDER BY v.comparison_id, r.side
             """, (session,)).fetchall()
+        comparisons = {}
         for row in rows:
-            result[row['model']] = dict(row)
+            comparisons.setdefault(row['comparison_id'], []).append(row)
+        for answers in comparisons.values():
+            count = len(answers)
+            group = groups.setdefault(count, {'participant_count': count, 'comparisons': 0, 'items': {}})
+            group['comparisons'] += 1
+            ranks = decision_ranks(answers[0], [answer['side'] for answer in answers])
+            positions = shared_positions(ranks)
+            first = [side for side, rank in ranks.items() if rank == min(ranks.values())]
+            for answer in answers:
+                item = group['items'].setdefault(answer['model'], {'model': answer['model'], 'compared': 0,
+                                                                'rank_sum': 0, 'wins': 0, 'ties': 0, 'losses': 0})
+                item['compared'] += 1
+                item['rank_sum'] += positions[answer['side']]
+                outcome = ('wins' if len(first) == 1 else 'ties') if answer['side'] in first else 'losses'
+                item[outcome] += 1
+        for group in groups.values():
+            items = list(group['items'].values())
+            for item in items:
+                item['average_rank'] = item.pop('rank_sum') / item['compared']
+            group['items'] = sorted(items, key=lambda item: (item['average_rank'], item['model']))
+        return list(groups.values())
+
+    def scores(self, session: str, models: tuple[str, ...]):
+        # Preserve the original counts contract for legacy clients.
+        result = {model: {'model': model, 'wins': 0, 'ties': 0, 'losses': 0, 'compared': 0} for model in models}
+        for group in self.scorecards(session):
+            for item in group['items']:
+                row = result.setdefault(item['model'], {'model': item['model'], 'wins': 0, 'ties': 0, 'losses': 0, 'compared': 0})
+                for key in ('wins', 'ties', 'losses', 'compared'):
+                    row[key] += item[key]
         return sorted(result.values(), key=lambda item: item['model'])
