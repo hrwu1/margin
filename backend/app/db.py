@@ -447,9 +447,11 @@ class Database:
         return list(groups.values())
 
     def scores(self, session: str, models: tuple[str, ...]):
-        # Preserve the original counts contract for legacy clients.
+        # Legacy clients only understand two-answer counts.
         result = {model: {'model': model, 'wins': 0, 'ties': 0, 'losses': 0, 'compared': 0} for model in models}
         for group in self.scorecards(session):
+            if group['participant_count'] != 2:
+                continue
             for item in group['items']:
                 row = result.setdefault(item['model'], {'model': item['model'], 'wins': 0, 'ties': 0, 'losses': 0, 'compared': 0})
                 for key in ('wins', 'ties', 'losses', 'compared'):

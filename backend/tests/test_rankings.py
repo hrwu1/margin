@@ -107,5 +107,7 @@ def test_mixed_formats_average_latest_decisions(tmp_path):
         db.rank('a', identifier, ranks, annotation_revision=0)
     groups = db.scorecards('a')
     assert groups[0]['comparisons'] == 2 and groups[1]['comparisons'] == 1
+    assert all(item['compared'] == 2 for item in db.scores('a', ()))
+    assert {item['model'] for item in db.scores('a', ())} == {'x', 'y'}
     assert {item['model']: item['average_rank'] for item in groups[0]['items']} == {'x': 1.25, 'y': 1.75}
     assert {item['model']: item['average_rank'] for item in groups[1]['items']} == {'x': 3, 'y': 1, 'z': 2}
