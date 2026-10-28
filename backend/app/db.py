@@ -183,6 +183,13 @@ class Database:
         with self.connect(write=True) as connection:
             connection.execute("INSERT INTO sessions VALUES (?, ?)", (token_hash, now()))
 
+    @staticmethod
+    def _check_capacity(connection, session: str, max_active: int):
+        if connection.execute("SELECT 1 FROM comparisons WHERE session_hash = ? AND status = 'pending'", (session,)).fetchone():
+            raise Capacity("A comparison is already running in this browser. Wait for it to finish.")
+        if connection.execute("SELECT COUNT(*) FROM comparisons WHERE status = 'pending'").fetchone()[0] >= max_active:
+            raise Capacity("The server is busy. Please try again shortly.")
+
     def create_comparison(self, session: str, request_id: str, prompt: str, models: list[str], max_active: int):
         if len(models) not in (2, 3) or len(set(models)) != len(models):
             raise ValueError("A comparison needs two or three distinct models.")
@@ -199,10 +206,7 @@ class Database:
                 if previous_models != set(models):
                     raise Conflict('This request ID was already used with different models.')
                 return previous["id"], False
-            if connection.execute("SELECT 1 FROM comparisons WHERE session_hash = ? AND status = 'pending'", (session,)).fetchone():
-                raise Capacity("A comparison is already running in this browser. Wait for it to finish.")
-            if connection.execute("SELECT COUNT(*) FROM comparisons WHERE status = 'pending'").fetchone()[0] >= max_active:
-                raise Capacity("The server is busy. Please try again shortly.")
+            self._check_capacity(connection, session, max_active)
             identifier = str(uuid4())
             connection.execute("INSERT INTO comparisons(id, session_hash, request_id, prompt, status, created_at) VALUES (?, ?, ?, ?, 'pending', ?)", (identifier, session, request_id, prompt, now()))
             connection.executemany(
@@ -211,12 +215,38 @@ class Database:
             )
         return identifier, True
 
-    def finish_response(self, comparison_id: str, side: str, *, content: str = '', error_code: str | None = None):
+    def retry_comparison(self, session: str, comparison_id: str, request_id: str, attempt: int, max_active: int):
         with self.connect(write=True) as connection:
-            connection.execute(
+            comparison = self._get(connection, session, comparison_id)
+            previous = connection.execute('SELECT attempt FROM retry_requests WHERE comparison_id = ? AND request_id = ?',
+                                          (comparison_id, request_id)).fetchone()
+            if previous:
+                if previous['attempt'] != attempt:
+                    raise Conflict('This retry request ID was already used for a different attempt.')
+                return comparison, False
+            if comparison['attempt'] != attempt:
+                raise Conflict('This comparison has a newer attempt. Reload before retrying.')
+            if comparison['vote'] or comparison['status'] != 'failed':
+                raise Conflict('Retry is available only after all responses finish and at least one fails, before ranking.')
+            self._check_capacity(connection, session, max_active)
+            connection.execute('INSERT INTO retry_requests VALUES (?, ?, ?)', (comparison_id, request_id, attempt))
+            connection.execute("UPDATE responses SET status = 'pending', content = '', error_code = NULL WHERE comparison_id = ? AND status = 'error'",
+                               (comparison_id,))
+            connection.execute("UPDATE comparisons SET status = 'pending', attempt = attempt + 1 WHERE id = ?", (comparison_id,))
+            return self._get(connection, session, comparison_id), True
+
+    def finish_response(self, comparison_id: str, side: str, *, content: str = '', error_code: str | None = None, attempt: int | None = None):
+        with self.connect(write=True) as connection:
+            if attempt is not None:
+                current = connection.execute('SELECT attempt FROM comparisons WHERE id = ?', (comparison_id,)).fetchone()
+                if current is None or current['attempt'] != attempt:
+                    return
+            finished = connection.execute(
                 "UPDATE responses SET status = ?, content = ?, error_code = ? WHERE comparison_id = ? AND side = ? AND status = 'pending'",
                 ('error' if error_code else 'success', content, error_code, comparison_id, side),
             )
+            if not finished.rowcount:
+                return
             statuses = [row[0] for row in connection.execute("SELECT status FROM responses WHERE comparison_id = ?", (comparison_id,))]
             if statuses and 'pending' not in statuses:
                 connection.execute("UPDATE comparisons SET status = ? WHERE id = ?", ('ready' if all(status == 'success' for status in statuses) else 'failed', comparison_id))

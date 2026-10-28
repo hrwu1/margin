@@ -25,10 +25,10 @@ ERRORS = {
     'model_unavailable': 'A selected model is unavailable to this OpenAI project. Choose another model.',
     'incomplete': 'This answer reached its output limit. Try a narrower prompt.',
     'refusal': 'This model declined the request. Try a different prompt.',
-    'timeout': 'This response took too long. Start a new comparison to try again.',
-    'provider_error': 'This response could not be generated. Start a new comparison to try again.',
+    'timeout': 'This response took too long. Retry failed answers to try again.',
+    'provider_error': 'This response could not be generated. Retry failed answers to try again.',
     'invalid_response': 'The provider returned an empty or oversized response.',
-    'interrupted': 'The server restarted before this response finished. Start a new comparison to try again.',
+    'interrupted': 'The server restarted before this response finished. Retry failed answers to try again.',
 }
 
 
@@ -99,6 +99,12 @@ class ReviseRanking(BaseModel):
     model_config = ConfigDict(extra='forbid')
     ranks: dict[str, Annotated[int, Field(ge=1, le=3, strict=True)]] = Field(min_length=2, max_length=3)
     revision: int = Field(ge=0, strict=True)
+
+
+class RetryComparison(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    request_id: UUID
+    attempt: int = Field(ge=0, strict=True)
 
 
 def public_comparison(record):
@@ -201,7 +207,7 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         defaults = (preferred + [model for model in available if model not in preferred])[:2]
         return {'items': available, 'defaults': defaults}
 
-    async def generate_response(comparison_id, side, model, prompt):
+    async def generate_response(comparison_id, side, model, prompt, attempt):
         error = None
         content = ''
         try:
@@ -219,12 +225,12 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         except Exception:
             # Provider exceptions can contain credentials and request contents.
             error = 'provider_error'
-        await asyncio.to_thread(db.finish_response, comparison_id, side, content=content, error_code=error)
+        await asyncio.to_thread(db.finish_response, comparison_id, side, content=content, error_code=error, attempt=attempt)
 
-    async def generate_pair(record):
+    async def generate_comparison(record):
         outcomes = await asyncio.gather(*[
-            generate_response(record['id'], answer['side'], answer['model'], record['prompt'])
-            for answer in record['responses']
+            generate_response(record['id'], answer['side'], answer['model'], record['prompt'], record['attempt'])
+            for answer in record['responses'] if answer['status'] == 'pending'
         ], return_exceptions=True)
         if any(isinstance(outcome, BaseException) for outcome in outcomes):
             logger.error('A comparison result could not be persisted. Check database availability.')
@@ -242,7 +248,17 @@ def create_app(settings: Settings | None = None, provider: Provider | None = Non
         identifier, created = await asyncio.to_thread(db.create_comparison, owner, str(body.request_id), body.prompt, models, settings.max_active)
         record = await asyncio.to_thread(db.get_comparison, owner, identifier)
         if created:
-            task = asyncio.create_task(generate_pair(record))
+            task = asyncio.create_task(generate_comparison(record))
+            tasks.add(task)
+            task.add_done_callback(tasks.discard)
+        response.status_code = 202 if record['status'] == 'pending' else 200
+        return public_comparison(record)
+
+    @app.post('/api/comparisons/{comparison_id}/retry')
+    async def retry_comparison(comparison_id: UUID, body: RetryComparison, response: Response, owner: Annotated[str, Depends(session)]):
+        record, created = await asyncio.to_thread(db.retry_comparison, owner, str(comparison_id), str(body.request_id), body.attempt, settings.max_active)
+        if created:
+            task = asyncio.create_task(generate_comparison(record))
             tasks.add(task)
             task.add_done_callback(tasks.discard)
         response.status_code = 202 if record['status'] == 'pending' else 200

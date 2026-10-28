@@ -26,7 +26,7 @@ export function useQuestionQueue(connected: boolean, onResult: (value: Compariso
       do {
         result = await queue.step();
         if (result && active) receive.current(result);
-        // Start the next pair as soon as completion is observed, without another polling delay.
+        // Start the next comparison after completion; explicit retries keep the queue paused.
       } while (active && result && result.status !== 'pending' && !queue.state.paused);
     };
     void tick();
