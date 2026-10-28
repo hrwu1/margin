@@ -1,5 +1,21 @@
 # Margin — design notes
 
+## Approved extension: ranked comparisons
+
+New comparisons offer two or three distinct models. Participant lists and response rows remain the shared contract; the current product limit is three, without a fixed two-element representation. Shuffle labels once and preserve the exact assignment across retries, reloads, ranking, and history. Existing two-model comparisons and saved queues retain their original participants.
+
+Every answer receives an integer rank from 1 through the participant count; at least one answer must be ranked 1. Equal values mean ties, and gaps do not affect relative preference. Store entered ranks. For scoring, each tied group shares the average of its occupied positions: `1,1,2` scores as `1.5,1.5,3`; `1,2,2` scores as `1,2.5,2.5`; all tied scores as `2,2,2`. Average these per-comparison scores per model, lower is better, independently for two- and three-model comparisons. Equal averages share leaderboard placement; display sample counts. Each comparison contributes only its latest saved decision. Keep historical win/tie/loss counts accessible.
+
+Preserve legacy vote rows unchanged on migration. A compatibility read maps A/B preferences to 1/2 and ties to 1/1. New decisions store complete rankings; revisions use optimistic concurrency, preserve first-vote annotations, and remain labelled edited after reveal. Only completed comparisons may be ranked; absent participants cannot be ranked or selected through legacy vote APIs. Model identities remain hidden until the first decision.
+
+Persistence owns schema upgrades, immutable response identity, decisions, retry admission, and scoring. The API owns validation, generation tasks and public anonymity. The frontend owns controls and the existing one-comparison-at-a-time question scheduler. Migration uses a consistent SQLite backup before changing an existing schema and a transaction; verification uses temporary databases.
+
+Manual Retry failed answers reruns only failed participants with the same model and prompt after all current attempts settle. It preserves successful answers and annotations and is disallowed after a saved decision. Persist retry request IDs and a monotonically increasing attempt revision; duplicate requests replay existing state, and late completions cannot overwrite a newer attempt. Apply existing session/server concurrency limits. Restarted attempts become interrupted and may be retried manually. A provider timeout may already be billable; local idempotency prevents duplicate dispatch from repeated client requests, not provider-level duplicate billing. No automatic paid retries.
+
+Retry snapshots carry attempt revisions so the client distinguishes a real failed-to-pending transition from stale network data. Retry operations survive browser reload through session storage and reconcile uncertain acknowledgements before another retry. Queued work remains paused during/after retry until explicitly resumed. Existing queue resume behavior may continue past failed questions without regenerating them.
+
+The UI retains existing panels, themes and responsive navigation, uses labelled selectors for two/three models and ranks, and narrower desktop columns. Broader visual redesign is deferred. Verification covers old v1/v2 data and annotations, ranking/tie arithmetic and revision, cross-session isolation, retry idempotency/capacity/restarts/stale writes, queues and reload recovery, plus desktop/mobile browser interactions. Implementation uses offline fixtures, an isolated worktree, tested commits, and no push.
+
 Margin implements the assessment's complete loop: one prompt, two model responses, side-by-side comparison, voting, a scorecard, and persistent history. The product question guiding the implementation was: **can someone return to a preference and understand what led to it?** Optional highlights and notes make that possible without turning every vote into a form.
 
 ## Problem breakdown and development approach

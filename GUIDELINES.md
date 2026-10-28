@@ -18,6 +18,22 @@ Keep Margin easy to run from a clean checkout: one prompt or a question list, tw
 
 Document the goal and completion criteria here before implementation. Make focused changes, preserve existing work, test affected behavior, and commit coherent steps. Use an isolated worktree for large or risky changes. Publishing requires an explicit request.
 
+## Ranked comparisons and manual retries
+
+Goal: offer two or three distinct models, rank every answer with ties, keep separate average-rank scorecards, and retry failed answers while preserving historical data. The user approved implementation after the design discussion; the final scoring rule is average occupied position for ties, lower is better.
+
+- [ ] Document the approved contracts in DESIGN_NOTES.md and implement a transactional, backed-up schema migration preserving all legacy data.
+- [ ] Support two/three participants and complete, revisable rankings; retain legacy vote compatibility and historical counts.
+- [ ] Calculate separate scorecards using average shared positions and one latest decision per comparison.
+- [ ] Add explicit failed-only retries with persistent idempotency, attempt guards, and queue reconciliation.
+- [ ] Extend model selection, ranking controls, compact columns, mobile tabs, history, offline fixtures, and question queues.
+- [ ] Verify migration preservation, ranking math, concurrency/failure recovery, terminal suites, and desktop/mobile browser workflows using temporary databases.
+- [ ] Update README, commit coherent tested steps, merge cleanly, and remove the temporary worktree. Do not push.
+
+Reference lock: retain Margin's existing typography, neutral light/dark surfaces, accent roles, panels, native model selects, and narrow-screen tabs. Use Refero's bundled Forms and Focus States guidance for labelled rank controls and explicit save/retry feedback. The user requested narrower columns and deferred broader visual redesign. No imagery, new design system, or dependencies.
+
+Completion requires usable two/three-model end-to-end workflows, exact preservation of historical records during migration, tied-score examples (1/2/3, 1.5/1.5/3, 1/2.5/2.5, 2/2/2), safe retries, and passing affected checks. Use offline providers and isolated databases; no paid generation or publication is part of this task.
+
 ## Selectable OpenAI models
 
 Goal: let users choose exactly two distinct GPT text-generation models available to the backend's OpenAI API key before each comparison.
